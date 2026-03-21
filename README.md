@@ -1,112 +1,237 @@
 # n8n-nodes-brixfit
 
-Official **n8n community node** for [Brixfit](https://brixfit.app) Coaching CRM.
+<div align="center">
 
-Automate your fitness coaching business — create leads from landing pages, sync data to Google Sheets, send WhatsApp messages when clients check in, and much more.
+![Brixfit](https://img.shields.io/badge/Brixfit-Coaching%20CRM-6366f1?style=for-the-badge)
+[![npm version](https://img.shields.io/npm/v/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
+[![npm downloads](https://img.shields.io/npm/dm/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
-**Author:** Jatin Beniwal · **Organisation:** Brixfly Services
+**Official n8n community node for [Brixfit](https://brixfit.app) — the AI-powered Coaching CRM for fitness coaches.**
+
+Automate your entire coaching workflow: capture leads from any source, sync client data, react to check-ins in real time, and connect Brixfit to 400+ apps inside n8n.
+
+</div>
 
 ---
 
-## Features
+## What is Brixfit?
 
-- **Brixfit** node — perform actions: create/get/update/delete leads, list clients, list check-ins, manage webhooks
-- **Brixfit Trigger** node — start workflows reactively when events fire in Brixfit (lead created, status changed, check-in submitted, etc.)
-- Full TypeScript types
+[Brixfit](https://brixfit.app) is an AI-powered coaching CRM built for fitness and health coaches. It manages leads, clients, check-ins, workout plans, diet plans, progress photos, and automated health reports — all in one place.
+
+This node lets you connect Brixfit to any tool in your n8n workflow.
+
+---
+
+## Nodes Included
+
+| Node | Type | Description |
+|------|------|-------------|
+| **Brixfit** | Action | Perform operations on leads, clients, check-ins and webhooks |
+| **Brixfit Trigger** | Trigger | Start workflows automatically when events fire in Brixfit |
+
+---
+
+## Prerequisites
+
+- A [Brixfit](https://brixfit.app) account (coach plan)
+- An API key — generate one at **Brixfit → Developer → API Keys**
+- n8n v1.0.0 or later
 
 ---
 
 ## Installation
 
-### In n8n Cloud or self-hosted (recommended)
+### n8n Cloud / Self-hosted UI (recommended)
 
-Go to **Settings → Community Nodes → Install** and enter:
+1. Go to **Settings → Community Nodes**
+2. Click **Install**
+3. Enter `n8n-nodes-brixfit`
+4. Click **Install** and confirm
 
-```
-n8n-nodes-brixfit
-```
-
-### Manual (self-hosted)
+### Self-hosted (manual)
 
 ```bash
+# Navigate to your n8n installation
 cd /usr/local/lib/node_modules/n8n
+
+# Install the package
 npm install n8n-nodes-brixfit
+
 # Restart n8n
 ```
 
 ---
 
-## Getting Started
+## Setup
 
-### 1. Add credentials
+### 1. Add Brixfit credentials
 
-In n8n: **Credentials → New → Brixfit API**
+In n8n, go to **Credentials → New** and search for **Brixfit API**.
 
-- **API Key**: Generate one in Brixfit → Developer → API Keys
-- **Base URL**: Leave as `https://brixfit.app`
+| Field | Value |
+|-------|-------|
+| **API Key** | Your key from Brixfit → Developer → API Keys |
+| **Base URL** | `https://brixfit.app` (leave as default) |
 
-### 2. Use the Brixfit node (actions)
+### 2. Add the Brixfit node to a workflow
 
-Drag **Brixfit** into your workflow. Choose a resource and operation:
+Drag the **Brixfit** node from the node panel and select your resource and operation.
 
-| Resource | Operations |
-|----------|------------|
-| Lead | Get All, Get, Create, Update, Update Status, Delete |
-| Client | Get All, Get |
-| Check-in | Get All |
-| Webhook | Get All, Create, Delete |
+### 3. Add the Brixfit Trigger (for event-driven workflows)
 
-### 3. Use the Brixfit Trigger node (events)
+Drag **Brixfit Trigger** as the first node in your workflow:
 
-Drag **Brixfit Trigger** as the first node. It starts your workflow when Brixfit fires an event.
+1. Select the events you want to listen for
+2. **Activate** the workflow — n8n generates a webhook URL
+3. Copy that URL
+4. Go to **Brixfit → Developer → Webhooks → Create**
+5. Paste the URL, select the same events, copy the secret
+6. Paste the secret back into the trigger node
 
-**Setup:**
-1. Activate the workflow — n8n gives you a webhook URL
-2. In Brixfit → Developer → Webhooks, create a new webhook pointing to that URL
-3. Select the same events in both places
-4. Paste the webhook secret into the trigger node
+---
+
+## Operations
+
+### Lead
+
+| Operation | Description |
+|-----------|-------------|
+| **Get All** | List leads with optional search, status filter, pagination |
+| **Get** | Fetch a single lead by ID |
+| **Create** | Create a new lead — fields are dynamically loaded from your Brixfit account |
+| **Update** | Update lead fields — same dynamic field loading |
+| **Update Status** | Move a lead to a different pipeline status |
+| **Delete** | Permanently delete a lead |
+
+> 💡 **Dynamic fields**: When you create or update a lead, the node automatically fetches your custom field definitions from Brixfit and shows them as individual inputs. Click **Refresh** to reload after adding new fields.
+
+### Client
+
+| Operation | Description |
+|-----------|-------------|
+| **Get All** | List clients with search and status filter |
+| **Get** | Fetch a single client by ID |
+| **Update** | Update account status, goal, phone, end date or notes |
+| **Deactivate** | Deactivate a client account |
+| **Get Check-ins** | Fetch all check-ins for a specific client |
+
+### Check-in
+
+| Operation | Description |
+|-----------|-------------|
+| **Get All** | List check-ins with filters (status, date range, client) |
+| **Get by Client** | Fetch all check-ins for a specific client ID |
+
+### Webhook
+
+| Operation | Description |
+|-----------|-------------|
+| **Get All** | List all registered webhooks |
+| **Create** | Register a new webhook endpoint |
+| **Delete** | Remove a webhook |
+
+---
+
+## Trigger Events
+
+The **Brixfit Trigger** node starts your workflow when any of these events fire:
+
+| Event | When it fires |
+|-------|--------------|
+| `lead.created` | A new lead is added |
+| `lead.updated` | A lead's details are changed |
+| `lead.status_changed` | A lead moves to a new pipeline stage |
+| `lead.converted` | A lead is converted to a client |
+| `lead.deleted` | A lead is deleted |
+| `client.created` | A new client is onboarded |
+| `client.updated` | A client's details are updated |
+| `checkin.submitted` | A client submits a check-in |
+| `*` | All events |
+
+All payloads are HMAC-SHA256 signed. If you set a **Webhook Secret**, the node verifies the signature automatically and rejects tampered requests.
 
 ---
 
 ## Example Workflows
 
-### Lead from Facebook → Brixfit
+### 1. Capture leads from any form → Brixfit
 
 ```
-Facebook Lead Ads Trigger → Set (map fields) → Brixfit: Create Lead
+Typeform / Tally / Facebook Lead Ads Trigger
+  → Set (map name, email, phone, goal)
+  → Brixfit: Create Lead
 ```
 
-### New lead → WhatsApp + Google Sheets
+### 2. New lead → WhatsApp + Google Sheets
 
 ```
-Brixfit Trigger (lead.created) → WhatsApp (send welcome message)
-                               → Google Sheets (append row)
+Brixfit Trigger (lead.created)
+  → WhatsApp: Send welcome message to lead
+  → Google Sheets: Append row
 ```
 
-### Daily check-in report → Email
+### 3. Client check-in submitted → Slack notification
 
 ```
-Schedule Trigger (every day 9am) → Brixfit: Get All Check-ins (from_date: today)
-                                 → Email (send summary to coach)
+Brixfit Trigger (checkin.submitted)
+  → Slack: Send message to #coach-alerts
+        "{{ $json.client_name }} just submitted their check-in ✅"
+```
+
+### 4. Daily check-in report → Email
+
+```
+Schedule Trigger (every day at 9am)
+  → Brixfit: Get All Check-ins (from_date: today, status: pending)
+  → Gmail: Send summary to coach
+```
+
+### 5. Lead status changed → CRM sync
+
+```
+Brixfit Trigger (lead.status_changed)
+  → IF (status == "converted")
+      → HubSpot: Create Contact
+      → Slack: Notify sales team
+```
+
+### 6. Auto-assign workout when client is created
+
+```
+Brixfit Trigger (client.created)
+  → Brixfit: Get client details
+  → HTTP Request: Trigger internal workflow
 ```
 
 ---
 
-## Supported Events (Trigger Node)
+## Data Handling
 
-| Event | Description |
-|-------|-------------|
-| `lead.created` | New lead added |
-| `lead.updated` | Lead details changed |
-| `lead.status_changed` | Lead moved to new pipeline stage |
-| `lead.converted` | Lead converted to client |
-| `lead.deleted` | Lead deleted |
-| `client.created` | New client onboarded |
-| `client.updated` | Client details updated |
-| `checkin.submitted` | Client submitted a check-in |
+When creating or updating leads via this node, Brixfit automatically:
+
+- **Calculates body metrics** (BMI, BMR, TDEE, body fat %) from height, weight, age, gender, and activity level fields — no manual calculation needed
+- **Normalizes phone numbers** — strips trunk zeros, handles international formats (`00XX` → `+XX`)
+- **Validates and casts field types** — numbers stay numbers, dates become ISO strings, booleans are properly coerced
+
+---
+
+## Resources
+
+- [Brixfit website](https://brixfit.app)
+- [API documentation](https://brixfit.app/coach/developer)
+- [npm package](https://www.npmjs.com/package/n8n-nodes-brixfit)
+- [GitHub repository](https://github.com/jatinbenivval/n8n-nodes-brixfit)
+- [Report issues](https://github.com/jatinbenivval/n8n-nodes-brixfit/issues)
+
+---
+
+## Contributing
+
+Pull requests are welcome. For major changes, please open an issue first.
 
 ---
 
 ## License
 
-MIT — © 2026 Jatin Beniwal / Brixfly Services
+MIT — © 2026 [Jatin Beniwal](https://github.com/jatinbenivval) / [Brixfly Services](https://brixfit.app)
