@@ -109,4 +109,4 @@ Schedule Trigger (every day 9am) → Brixfit: Get All Check-ins (from_date: toda
 
 ## License
 
-MIT — © 2025 Jatin Beniwal / Brixfly Services
+MIT — © 2026 Jatin Beniwal / Brixfly Services
