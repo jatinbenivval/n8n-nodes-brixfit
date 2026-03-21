@@ -4,6 +4,7 @@ import type {
   INodeType,
   INodeTypeDescription,
   IWebhookResponseData,
+  IDataObject,
 } from 'n8n-workflow'
 
 /**
@@ -121,7 +122,7 @@ export class BrixfitTrigger implements INodeType {
     }
 
     // ── Event filtering ────────────────────────────────────────────────────
-    const event = (body as Record<string, unknown>).event as string
+    const event = (body as IDataObject).event as string
     const listenAll = allowedEvents.includes('*')
 
     if (!listenAll && !allowedEvents.includes(event)) {
@@ -129,7 +130,7 @@ export class BrixfitTrigger implements INodeType {
     }
 
     return {
-      workflowData: [[{ json: body as Record<string, unknown> }]],
+      workflowData: [[{ json: body as IDataObject }]],
     }
   }
 }

@@ -4,6 +4,7 @@ import type {
   INodeType,
   INodeTypeDescription,
   IRequestOptions,
+  IDataObject,
 } from 'n8n-workflow'
 import { NodeOperationError } from 'n8n-workflow'
 
@@ -259,40 +260,40 @@ export class Brixfit implements INodeType {
       try {
         if (resource === 'lead') {
           if (operation === 'getAll') {
-            const filters = this.getNodeParameter('filters', i, {}) as Record<string, unknown>
-            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ''))
+            const filters = this.getNodeParameter('filters', i, {}) as IDataObject
+            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')) as IDataObject
             requestOptions = { ...requestOptions, url: `${baseUrl}/leads`, qs }
           } else if (operation === 'get') {
             const id = this.getNodeParameter('leadId', i) as string
             requestOptions = { ...requestOptions, url: `${baseUrl}/leads/${id}` }
           } else if (operation === 'create') {
             const name = this.getNodeParameter('name', i) as string
-            const extra = this.getNodeParameter('additionalFields', i, {}) as Record<string, unknown>
-            requestOptions = { ...requestOptions, method: 'POST', url: `${baseUrl}/leads`, body: { name, ...extra } }
+            const extra = this.getNodeParameter('additionalFields', i, {}) as IDataObject
+            requestOptions = { ...requestOptions, method: 'POST', url: `${baseUrl}/leads`, body: { name, ...extra } as IDataObject }
           } else if (operation === 'update') {
             const id = this.getNodeParameter('leadId', i) as string
-            const body = this.getNodeParameter('updateFields', i, {}) as Record<string, unknown>
+            const body = this.getNodeParameter('updateFields', i, {}) as IDataObject
             requestOptions = { ...requestOptions, method: 'PATCH', url: `${baseUrl}/leads/${id}`, body }
           } else if (operation === 'updateStatus') {
             const id     = this.getNodeParameter('leadId', i) as string
             const status = this.getNodeParameter('status', i) as string
-            requestOptions = { ...requestOptions, method: 'PATCH', url: `${baseUrl}/leads/${id}`, body: { status } }
+            requestOptions = { ...requestOptions, method: 'PATCH', url: `${baseUrl}/leads/${id}`, body: { status } as IDataObject }
           } else if (operation === 'delete') {
             const id = this.getNodeParameter('leadId', i) as string
             requestOptions = { ...requestOptions, method: 'DELETE', url: `${baseUrl}/leads/${id}` }
           }
         } else if (resource === 'client') {
           if (operation === 'getAll') {
-            const filters = this.getNodeParameter('filters', i, {}) as Record<string, unknown>
-            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ''))
+            const filters = this.getNodeParameter('filters', i, {}) as IDataObject
+            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')) as IDataObject
             requestOptions = { ...requestOptions, url: `${baseUrl}/clients`, qs }
           } else if (operation === 'get') {
             const id = this.getNodeParameter('clientId', i) as string
             requestOptions = { ...requestOptions, url: `${baseUrl}/clients/${id}` }
           }
         } else if (resource === 'checkin') {
-          const filters = this.getNodeParameter('filters', i, {}) as Record<string, unknown>
-          const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ''))
+          const filters = this.getNodeParameter('filters', i, {}) as IDataObject
+          const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')) as IDataObject
           requestOptions = { ...requestOptions, url: `${baseUrl}/checkins`, qs }
         } else if (resource === 'webhook') {
           if (operation === 'getAll') {
@@ -301,7 +302,7 @@ export class Brixfit implements INodeType {
             const url    = this.getNodeParameter('webhookUrl', i) as string
             const events = this.getNodeParameter('events', i) as string[]
             const desc   = this.getNodeParameter('webhookDescription', i, '') as string
-            requestOptions = { ...requestOptions, method: 'POST', url: `${baseUrl}/webhooks`, body: { url, events, description: desc || undefined } }
+            requestOptions = { ...requestOptions, method: 'POST', url: `${baseUrl}/webhooks`, body: { url, events, description: desc || undefined } as IDataObject }
           } else if (operation === 'delete') {
             const id = this.getNodeParameter('webhookId', i) as string
             requestOptions = { ...requestOptions, method: 'DELETE', url: `${baseUrl}/webhooks/${id}` }
@@ -313,9 +314,9 @@ export class Brixfit implements INodeType {
         const result   = parsed.data ?? parsed
 
         if (Array.isArray(result)) {
-          result.forEach(item => returnData.push({ json: item }))
+          result.forEach((item: IDataObject) => returnData.push({ json: item }))
         } else {
-          returnData.push({ json: result as Record<string, unknown> })
+          returnData.push({ json: result as IDataObject })
         }
       } catch (err) {
         if (this.continueOnFail()) {
