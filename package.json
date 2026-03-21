@@ -1,0 +1,50 @@
+{
+  "name": "n8n-nodes-brixfit",
+  "version": "1.0.0",
+  "description": "n8n community node for Brixfit Coaching CRM — manage leads, clients, check-ins and webhooks",
+  "author": {
+    "name": "Jatin Beniwal",
+    "email": "jatin@brixfly.com",
+    "url": "https://brixfit.app"
+  },
+  "license": "MIT",
+  "homepage": "https://brixfit.app/docs/n8n",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jatinbenivval/brix-ai-coaching-crm"
+  },
+  "keywords": [
+    "n8n-community-node-package",
+    "brixfit",
+    "coaching",
+    "crm",
+    "fitness",
+    "leads",
+    "automation"
+  ],
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc && gulp build:icons",
+    "dev": "tsc --watch",
+    "format": "prettier nodes credentials --write",
+    "lint": "eslint nodes credentials package.json",
+    "prepublishOnly": "npm run build && npm run lint"
+  },
+  "files": ["dist"],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": ["dist/credentials/BrixfitApi.credentials.js"],
+    "nodes": [
+      "dist/nodes/Brixfit/Brixfit.node.js",
+      "dist/nodes/Brixfit/BrixfitTrigger.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "n8n-workflow": "*",
+    "typescript": "^5.3.0"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
+}
