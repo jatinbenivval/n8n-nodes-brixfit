@@ -1,10 +1,13 @@
 import type {
   IExecuteFunctions,
+  ILoadOptionsFunctions,
   INodeExecutionData,
   INodeType,
   INodeTypeDescription,
   IRequestOptions,
   IDataObject,
+  ResourceMapperFields,
+  ResourceMapperField,
 } from 'n8n-workflow'
 import { NodeOperationError } from 'n8n-workflow'
 
@@ -21,30 +24,24 @@ export class Brixfit implements INodeType {
     inputs: ['main'],
     outputs: ['main'],
     credentials: [{ name: 'brixfitApi', required: true }],
-    requestDefaults: {
-      baseURL: '={{$credentials.baseUrl}}/api/public/v1',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': '={{$credentials.apiKey}}',
-      },
-    },
     properties: [
-      // ── Resource selector ────────────────────────────────────────────────
+
+      // ── Resource selector ──────────────────────────────────────────────────
       {
         displayName: 'Resource',
         name: 'resource',
         type: 'options',
         noDataExpression: true,
         options: [
-          { name: 'Lead',    value: 'lead'   },
-          { name: 'Client',  value: 'client' },
+          { name: 'Lead',     value: 'lead'    },
+          { name: 'Client',   value: 'client'  },
           { name: 'Check-in', value: 'checkin' },
-          { name: 'Webhook', value: 'webhook' },
+          { name: 'Webhook',  value: 'webhook' },
         ],
         default: 'lead',
       },
 
-      // ── Lead operations ───────────────────────────────────────────────────
+      // ── Lead operations ────────────────────────────────────────────────────
       {
         displayName: 'Operation',
         name: 'operation',
@@ -52,17 +49,17 @@ export class Brixfit implements INodeType {
         noDataExpression: true,
         displayOptions: { show: { resource: ['lead'] } },
         options: [
-          { name: 'Create',        value: 'create',       description: 'Create a new lead',           action: 'Create a lead'         },
-          { name: 'Get',           value: 'get',          description: 'Get a lead by ID',            action: 'Get a lead'            },
-          { name: 'Get All',       value: 'getAll',       description: 'List all leads',              action: 'Get all leads'         },
-          { name: 'Update',        value: 'update',       description: 'Update a lead',               action: 'Update a lead'         },
-          { name: 'Update Status', value: 'updateStatus', description: 'Change a lead\'s status',     action: 'Update lead status'    },
-          { name: 'Delete',        value: 'delete',       description: 'Delete a lead permanently',   action: 'Delete a lead'         },
+          { name: 'Create',        value: 'create',       description: 'Create a new lead',         action: 'Create a lead'       },
+          { name: 'Get',           value: 'get',          description: 'Get a lead by ID',          action: 'Get a lead'          },
+          { name: 'Get All',       value: 'getAll',       description: 'List all leads',            action: 'Get all leads'       },
+          { name: 'Update',        value: 'update',       description: 'Update a lead',             action: 'Update a lead'       },
+          { name: 'Update Status', value: 'updateStatus', description: "Change a lead's status",    action: 'Update lead status'  },
+          { name: 'Delete',        value: 'delete',       description: 'Delete a lead permanently', action: 'Delete a lead'       },
         ],
         default: 'getAll',
       },
 
-      // ── Client operations ─────────────────────────────────────────────────
+      // ── Client operations ──────────────────────────────────────────────────
       {
         displayName: 'Operation',
         name: 'operation',
@@ -70,13 +67,16 @@ export class Brixfit implements INodeType {
         noDataExpression: true,
         displayOptions: { show: { resource: ['client'] } },
         options: [
-          { name: 'Get',     value: 'get',    description: 'Get a client by ID', action: 'Get a client'     },
-          { name: 'Get All', value: 'getAll', description: 'List all clients',   action: 'Get all clients'  },
+          { name: 'Get',             value: 'get',             description: 'Get a client by ID',          action: 'Get a client'           },
+          { name: 'Get All',         value: 'getAll',          description: 'List all clients',            action: 'Get all clients'         },
+          { name: 'Update',          value: 'update',          description: 'Update a client',             action: 'Update a client'         },
+          { name: 'Deactivate',      value: 'deactivate',      description: 'Deactivate a client account', action: 'Deactivate a client'     },
+          { name: 'Get Check-ins',   value: 'getCheckins',     description: 'Get all check-ins for a client', action: 'Get client check-ins' },
         ],
         default: 'getAll',
       },
 
-      // ── Check-in operations ───────────────────────────────────────────────
+      // ── Check-in operations ────────────────────────────────────────────────
       {
         displayName: 'Operation',
         name: 'operation',
@@ -84,12 +84,13 @@ export class Brixfit implements INodeType {
         noDataExpression: true,
         displayOptions: { show: { resource: ['checkin'] } },
         options: [
-          { name: 'Get All', value: 'getAll', description: 'List check-ins', action: 'Get all check-ins' },
+          { name: 'Get All',          value: 'getAll',       description: 'List all check-ins with optional filters', action: 'Get all check-ins'        },
+          { name: 'Get by Client',    value: 'getByClient',  description: 'Get all check-ins for a specific client',  action: 'Get check-ins by client'  },
         ],
         default: 'getAll',
       },
 
-      // ── Webhook operations ────────────────────────────────────────────────
+      // ── Webhook operations ─────────────────────────────────────────────────
       {
         displayName: 'Operation',
         name: 'operation',
@@ -97,14 +98,14 @@ export class Brixfit implements INodeType {
         noDataExpression: true,
         displayOptions: { show: { resource: ['webhook'] } },
         options: [
-          { name: 'Create', value: 'create', description: 'Register a new webhook',  action: 'Create a webhook'  },
-          { name: 'Get All', value: 'getAll', description: 'List all webhooks',       action: 'Get all webhooks'  },
-          { name: 'Delete',  value: 'delete', description: 'Remove a webhook',        action: 'Delete a webhook'  },
+          { name: 'Create',  value: 'create',  description: 'Register a new webhook', action: 'Create a webhook' },
+          { name: 'Get All', value: 'getAll',  description: 'List all webhooks',      action: 'Get all webhooks' },
+          { name: 'Delete',  value: 'delete',  description: 'Remove a webhook',       action: 'Delete a webhook' },
         ],
         default: 'getAll',
       },
 
-      // ── Shared: ID field ──────────────────────────────────────────────────
+      // ── Lead ID ────────────────────────────────────────────────────────────
       {
         displayName: 'Lead ID',
         name: 'leadId',
@@ -112,16 +113,194 @@ export class Brixfit implements INodeType {
         required: true,
         displayOptions: { show: { resource: ['lead'], operation: ['get', 'update', 'updateStatus', 'delete'] } },
         default: '',
-        description: 'The ID of the lead',
+        description: 'The unique ID of the lead',
       },
+
+      // ── Lead create — dynamic fields via resourceMapper ────────────────────
+      {
+        displayName: 'Name',
+        name: 'name',
+        type: 'string',
+        required: true,
+        displayOptions: { show: { resource: ['lead'], operation: ['create'] } },
+        default: '',
+        description: 'Full name of the lead',
+      },
+      {
+        displayName: 'Lead Fields',
+        name: 'leadFields',
+        type: 'resourceMapper',
+        noDataExpression: true,
+        default: { mappingMode: 'defineBelow', value: null },
+        displayOptions: { show: { resource: ['lead'], operation: ['create'] } },
+        typeOptions: {
+          resourceMapper: {
+            resourceMapperMethod: 'getLeadFields',
+            mode: 'add',
+            fieldWords: { singular: 'field', plural: 'fields' },
+            addAllFields: false,
+            multiKeyMatch: false,
+          },
+        },
+        description: 'Fields defined in your Brixfit lead form. Click "Refresh" to load the latest fields from your account.',
+      },
+
+      // ── Lead update — dynamic fields ───────────────────────────────────────
+      {
+        displayName: 'Update Fields',
+        name: 'leadUpdateFields',
+        type: 'resourceMapper',
+        noDataExpression: true,
+        default: { mappingMode: 'defineBelow', value: null },
+        displayOptions: { show: { resource: ['lead'], operation: ['update'] } },
+        typeOptions: {
+          resourceMapper: {
+            resourceMapperMethod: 'getLeadUpdateFields',
+            mode: 'update',
+            fieldWords: { singular: 'field', plural: 'fields' },
+            addAllFields: false,
+            multiKeyMatch: false,
+          },
+        },
+        description: 'Fields to update on this lead',
+      },
+
+      // ── Lead update status ─────────────────────────────────────────────────
+      {
+        displayName: 'Status',
+        name: 'status',
+        type: 'string',
+        required: true,
+        displayOptions: { show: { resource: ['lead'], operation: ['updateStatus'] } },
+        default: '',
+        description: 'New status value — must match a status defined in your Brixfit pipeline',
+      },
+
+      // ── Client ID ──────────────────────────────────────────────────────────
       {
         displayName: 'Client ID',
         name: 'clientId',
         type: 'string',
         required: true,
-        displayOptions: { show: { resource: ['client'], operation: ['get'] } },
+        displayOptions: {
+          show: {
+            resource: ['client'],
+            operation: ['get', 'update', 'deactivate', 'getCheckins'],
+          },
+        },
         default: '',
+        description: 'The unique ID of the client',
       },
+
+      // ── Client update fields ───────────────────────────────────────────────
+      {
+        displayName: 'Update Fields',
+        name: 'clientUpdateFields',
+        type: 'collection',
+        placeholder: 'Add Field',
+        displayOptions: { show: { resource: ['client'], operation: ['update'] } },
+        default: {},
+        options: [
+          {
+            displayName: 'Account Status',
+            name: 'account_status',
+            type: 'options',
+            options: [
+              { name: 'Active',   value: 'active'   },
+              { name: 'Inactive', value: 'inactive' },
+              { name: 'Paused',   value: 'paused'   },
+            ],
+            default: 'active',
+          },
+          { displayName: 'Goal',     name: 'goal',     type: 'string', default: '' },
+          { displayName: 'Phone',    name: 'phone',    type: 'string', default: '' },
+          { displayName: 'End Date', name: 'end_date', type: 'string', default: '', description: 'Subscription end date (YYYY-MM-DD)' },
+          { displayName: 'Notes',    name: 'notes',    type: 'string', default: '', typeOptions: { rows: 3 } },
+        ],
+      },
+
+      // ── Check-in: Get by Client (dedicated) ───────────────────────────────
+      {
+        displayName: 'Client ID',
+        name: 'checkinClientId',
+        type: 'string',
+        required: true,
+        displayOptions: { show: { resource: ['checkin'], operation: ['getByClient'] } },
+        default: '',
+        description: 'Fetch all check-ins submitted by this client',
+      },
+      {
+        displayName: 'Options',
+        name: 'checkinClientOptions',
+        type: 'collection',
+        placeholder: 'Add Option',
+        displayOptions: { show: { resource: ['checkin'], operation: ['getByClient'] } },
+        default: {},
+        options: [
+          {
+            displayName: 'Status',
+            name: 'status',
+            type: 'options',
+            options: [
+              { name: 'All',       value: '' },
+              { name: 'Completed', value: 'completed' },
+              { name: 'Pending',   value: 'pending'   },
+              { name: 'Reviewed',  value: 'reviewed'  },
+            ],
+            default: '',
+          },
+          { displayName: 'From Date', name: 'from_date', type: 'string', default: '', description: 'YYYY-MM-DD' },
+          { displayName: 'To Date',   name: 'to_date',   type: 'string', default: '', description: 'YYYY-MM-DD' },
+          { displayName: 'Page',      name: 'page',      type: 'number', default: 1  },
+          { displayName: 'Per Page',  name: 'per_page',  type: 'number', default: 20 },
+        ],
+      },
+
+      // ── List filters (shared getAll) ───────────────────────────────────────
+      {
+        displayName: 'Filters',
+        name: 'filters',
+        type: 'collection',
+        placeholder: 'Add Filter',
+        displayOptions: {
+          show: {
+            operation: ['getAll'],
+          },
+        },
+        default: {},
+        options: [
+          { displayName: 'Search',    name: 'search',    type: 'string', default: '' },
+          { displayName: 'Status',    name: 'status',    type: 'string', default: '' },
+          { displayName: 'Page',      name: 'page',      type: 'number', default: 1  },
+          { displayName: 'Per Page',  name: 'per_page',  type: 'number', default: 20 },
+          // Check-in only filters
+          {
+            displayName: 'Client ID',
+            name: 'client_id',
+            type: 'string',
+            displayOptions: { show: { '/resource': ['checkin'] } },
+            default: '',
+          },
+          {
+            displayName: 'From Date',
+            name: 'from_date',
+            type: 'string',
+            displayOptions: { show: { '/resource': ['checkin'] } },
+            default: '',
+            description: 'YYYY-MM-DD',
+          },
+          {
+            displayName: 'To Date',
+            name: 'to_date',
+            type: 'string',
+            displayOptions: { show: { '/resource': ['checkin'] } },
+            default: '',
+            description: 'YYYY-MM-DD',
+          },
+        ],
+      },
+
+      // ── Webhook ID ─────────────────────────────────────────────────────────
       {
         displayName: 'Webhook ID',
         name: 'webhookId',
@@ -131,79 +310,7 @@ export class Brixfit implements INodeType {
         default: '',
       },
 
-      // ── Lead create fields ────────────────────────────────────────────────
-      {
-        displayName: 'Name',
-        name: 'name',
-        type: 'string',
-        required: true,
-        displayOptions: { show: { resource: ['lead'], operation: ['create'] } },
-        default: '',
-      },
-      {
-        displayName: 'Additional Fields',
-        name: 'additionalFields',
-        type: 'collection',
-        placeholder: 'Add Field',
-        displayOptions: { show: { resource: ['lead'], operation: ['create'] } },
-        default: {},
-        options: [
-          { displayName: 'Email',  name: 'email',  type: 'string', default: '' },
-          { displayName: 'Phone',  name: 'phone',  type: 'string', default: '' },
-          { displayName: 'BMI',    name: 'bmi',    type: 'number', default: 0  },
-          { displayName: 'Status', name: 'status', type: 'string', default: 'new' },
-        ],
-      },
-
-      // ── Lead update fields ────────────────────────────────────────────────
-      {
-        displayName: 'Update Fields',
-        name: 'updateFields',
-        type: 'collection',
-        placeholder: 'Add Field',
-        displayOptions: { show: { resource: ['lead'], operation: ['update'] } },
-        default: {},
-        options: [
-          { displayName: 'Name',   name: 'name',   type: 'string', default: '' },
-          { displayName: 'Email',  name: 'email',  type: 'string', default: '' },
-          { displayName: 'Phone',  name: 'phone',  type: 'string', default: '' },
-          { displayName: 'BMI',    name: 'bmi',    type: 'number', default: 0  },
-          { displayName: 'Status', name: 'status', type: 'string', default: '' },
-        ],
-      },
-
-      // ── Lead update status ────────────────────────────────────────────────
-      {
-        displayName: 'Status',
-        name: 'status',
-        type: 'string',
-        required: true,
-        displayOptions: { show: { resource: ['lead'], operation: ['updateStatus'] } },
-        default: '',
-        description: 'New status value (must match a status defined in your Brixfit pipeline)',
-      },
-
-      // ── List options ──────────────────────────────────────────────────────
-      {
-        displayName: 'Filters',
-        name: 'filters',
-        type: 'collection',
-        placeholder: 'Add Filter',
-        displayOptions: { show: { operation: ['getAll'] } },
-        default: {},
-        options: [
-          { displayName: 'Search',   name: 'search',    type: 'string',  default: '' },
-          { displayName: 'Status',   name: 'status',    type: 'string',  default: '' },
-          { displayName: 'Page',     name: 'page',      type: 'number',  default: 1  },
-          { displayName: 'Per Page', name: 'per_page',  type: 'number',  default: 20 },
-          // Check-in specific
-          { displayName: 'Client ID',  name: 'client_id', type: 'string', displayOptions: { show: { '/resource': ['checkin'] } }, default: '' },
-          { displayName: 'From Date',  name: 'from_date', type: 'string', displayOptions: { show: { '/resource': ['checkin'] } }, default: '', description: 'YYYY-MM-DD' },
-          { displayName: 'To Date',    name: 'to_date',   type: 'string', displayOptions: { show: { '/resource': ['checkin'] } }, default: '', description: 'YYYY-MM-DD' },
-        ],
-      },
-
-      // ── Webhook create ────────────────────────────────────────────────────
+      // ── Webhook create ─────────────────────────────────────────────────────
       {
         displayName: 'URL',
         name: 'webhookUrl',
@@ -241,12 +348,25 @@ export class Brixfit implements INodeType {
     ],
   }
 
+  // ── Dynamic field loading ────────────────────────────────────────────────────
+  methods = {
+    resourceMapping: {
+      async getLeadFields(this: ILoadOptionsFunctions): Promise<ResourceMapperFields> {
+        return loadLeadFieldsFromApi(this, false)
+      },
+      async getLeadUpdateFields(this: ILoadOptionsFunctions): Promise<ResourceMapperFields> {
+        return loadLeadFieldsFromApi(this, true)
+      },
+    },
+  }
+
+  // ── Execute ─────────────────────────────────────────────────────────────────
   async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-    const items = this.getInputData()
+    const items      = this.getInputData()
     const returnData: INodeExecutionData[] = []
     const credentials = await this.getCredentials('brixfitApi')
-    const baseUrl = `${credentials.baseUrl}/api/public/v1`
-    const headers = {
+    const baseUrl     = `${credentials.baseUrl}/api/public/v1`
+    const headers     = {
       'Content-Type': 'application/json',
       'X-API-Key': credentials.apiKey as string,
     }
@@ -258,51 +378,112 @@ export class Brixfit implements INodeType {
       let requestOptions: IRequestOptions = { method: 'GET', url: '', headers, json: true }
 
       try {
+        // ── LEAD ──────────────────────────────────────────────────────────────
         if (resource === 'lead') {
           if (operation === 'getAll') {
             const filters = this.getNodeParameter('filters', i, {}) as IDataObject
-            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')) as IDataObject
+            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v !== 0)) as IDataObject
             requestOptions = { ...requestOptions, url: `${baseUrl}/leads`, qs }
+
           } else if (operation === 'get') {
             const id = this.getNodeParameter('leadId', i) as string
             requestOptions = { ...requestOptions, url: `${baseUrl}/leads/${id}` }
+
           } else if (operation === 'create') {
             const name = this.getNodeParameter('name', i) as string
-            const extra = this.getNodeParameter('additionalFields', i, {}) as IDataObject
-            requestOptions = { ...requestOptions, method: 'POST', url: `${baseUrl}/leads`, body: { name, ...extra } as IDataObject }
+            const mapperData = this.getNodeParameter('leadFields', i, { mappingMode: 'defineBelow', value: null }) as { value: Record<string, unknown> | null }
+            const dynamicFields = mapperData.value ?? {}
+            requestOptions = {
+              ...requestOptions,
+              method: 'POST',
+              url: `${baseUrl}/leads`,
+              body: { name, ...dynamicFields } as IDataObject,
+            }
+
           } else if (operation === 'update') {
             const id = this.getNodeParameter('leadId', i) as string
-            const body = this.getNodeParameter('updateFields', i, {}) as IDataObject
+            const mapperData = this.getNodeParameter('leadUpdateFields', i, { mappingMode: 'defineBelow', value: null }) as { value: Record<string, unknown> | null }
+            const body = (mapperData.value ?? {}) as IDataObject
             requestOptions = { ...requestOptions, method: 'PATCH', url: `${baseUrl}/leads/${id}`, body }
+
           } else if (operation === 'updateStatus') {
             const id     = this.getNodeParameter('leadId', i) as string
             const status = this.getNodeParameter('status', i) as string
             requestOptions = { ...requestOptions, method: 'PATCH', url: `${baseUrl}/leads/${id}`, body: { status } as IDataObject }
+
           } else if (operation === 'delete') {
             const id = this.getNodeParameter('leadId', i) as string
             requestOptions = { ...requestOptions, method: 'DELETE', url: `${baseUrl}/leads/${id}` }
           }
+
+        // ── CLIENT ────────────────────────────────────────────────────────────
         } else if (resource === 'client') {
           if (operation === 'getAll') {
             const filters = this.getNodeParameter('filters', i, {}) as IDataObject
-            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')) as IDataObject
+            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v !== 0)) as IDataObject
             requestOptions = { ...requestOptions, url: `${baseUrl}/clients`, qs }
+
           } else if (operation === 'get') {
             const id = this.getNodeParameter('clientId', i) as string
             requestOptions = { ...requestOptions, url: `${baseUrl}/clients/${id}` }
+
+          } else if (operation === 'update') {
+            const id   = this.getNodeParameter('clientId', i) as string
+            const body = this.getNodeParameter('clientUpdateFields', i, {}) as IDataObject
+            const clean = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== '' && v !== null)) as IDataObject
+            requestOptions = { ...requestOptions, method: 'PATCH', url: `${baseUrl}/clients/${id}`, body: clean }
+
+          } else if (operation === 'deactivate') {
+            const id = this.getNodeParameter('clientId', i) as string
+            requestOptions = { ...requestOptions, method: 'DELETE', url: `${baseUrl}/clients/${id}` }
+
+          } else if (operation === 'getCheckins') {
+            const clientId = this.getNodeParameter('clientId', i) as string
+            const opts     = this.getNodeParameter('checkinClientOptions', i, {}) as IDataObject
+            const qs: IDataObject = { client_id: clientId }
+            if (opts.status)    qs.status    = opts.status
+            if (opts.from_date) qs.from_date = opts.from_date
+            if (opts.to_date)   qs.to_date   = opts.to_date
+            if (opts.page)      qs.page      = opts.page
+            if (opts.per_page)  qs.per_page  = opts.per_page
+            requestOptions = { ...requestOptions, url: `${baseUrl}/checkins`, qs }
           }
+
+        // ── CHECKIN ───────────────────────────────────────────────────────────
         } else if (resource === 'checkin') {
-          const filters = this.getNodeParameter('filters', i, {}) as IDataObject
-          const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')) as IDataObject
-          requestOptions = { ...requestOptions, url: `${baseUrl}/checkins`, qs }
+          if (operation === 'getAll') {
+            const filters = this.getNodeParameter('filters', i, {}) as IDataObject
+            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v !== 0)) as IDataObject
+            requestOptions = { ...requestOptions, url: `${baseUrl}/checkins`, qs }
+
+          } else if (operation === 'getByClient') {
+            const clientId = this.getNodeParameter('checkinClientId', i) as string
+            const opts     = this.getNodeParameter('checkinClientOptions', i, {}) as IDataObject
+            const qs: IDataObject = { client_id: clientId }
+            if (opts.status)    qs.status    = opts.status
+            if (opts.from_date) qs.from_date = opts.from_date
+            if (opts.to_date)   qs.to_date   = opts.to_date
+            if (opts.page)      qs.page      = opts.page
+            if (opts.per_page)  qs.per_page  = opts.per_page
+            requestOptions = { ...requestOptions, url: `${baseUrl}/checkins`, qs }
+          }
+
+        // ── WEBHOOK ───────────────────────────────────────────────────────────
         } else if (resource === 'webhook') {
           if (operation === 'getAll') {
             requestOptions = { ...requestOptions, url: `${baseUrl}/webhooks` }
+
           } else if (operation === 'create') {
             const url    = this.getNodeParameter('webhookUrl', i) as string
             const events = this.getNodeParameter('events', i) as string[]
             const desc   = this.getNodeParameter('webhookDescription', i, '') as string
-            requestOptions = { ...requestOptions, method: 'POST', url: `${baseUrl}/webhooks`, body: { url, events, description: desc || undefined } as IDataObject }
+            requestOptions = {
+              ...requestOptions,
+              method: 'POST',
+              url: `${baseUrl}/webhooks`,
+              body: { url, events, description: desc || undefined } as IDataObject,
+            }
+
           } else if (operation === 'delete') {
             const id = this.getNodeParameter('webhookId', i) as string
             requestOptions = { ...requestOptions, method: 'DELETE', url: `${baseUrl}/webhooks/${id}` }
@@ -318,6 +499,7 @@ export class Brixfit implements INodeType {
         } else {
           returnData.push({ json: result as IDataObject })
         }
+
       } catch (err) {
         if (this.continueOnFail()) {
           returnData.push({ json: { error: err instanceof Error ? err.message : String(err) }, pairedItem: { item: i } })
@@ -329,4 +511,99 @@ export class Brixfit implements INodeType {
 
     return [returnData]
   }
+}
+
+// ── Shared helper: fetch lead field definitions from Brixfit API ─────────────
+async function loadLeadFieldsFromApi(
+  context: ILoadOptionsFunctions,
+  includeNameField: boolean,
+): Promise<ResourceMapperFields> {
+  const credentials = await context.getCredentials('brixfitApi')
+  const baseUrl = `${credentials.baseUrl}/api/public/v1`
+
+  let rawFields: Array<{ field_key: string; label: string; field_type: string; is_required: boolean }> = []
+  try {
+    const response = await context.helpers.request({
+      method: 'GET',
+      url: `${baseUrl}/fields/leads`,
+      headers: { 'X-API-Key': credentials.apiKey as string },
+      json: true,
+    }) as { data?: typeof rawFields }
+    rawFields = response.data ?? []
+  } catch {
+    // Return minimal fields if API call fails (e.g. bad credentials)
+    rawFields = []
+  }
+
+  const typeMap: Record<string, ResourceMapperField['type']> = {
+    string:  'string',
+    number:  'number',
+    boolean: 'boolean',
+    date:    'string',
+  }
+
+  const fields: ResourceMapperField[] = []
+
+  // Always include standard fields first
+  if (!includeNameField) {
+    // name is a separate required param on create — skip it here
+  } else {
+    fields.push({
+      id:               'name',
+      displayName:      'Name',
+      required:         false,
+      defaultMatch:     false,
+      display:          true,
+      type:             'string',
+      canBeUsedToMatch: false,
+    })
+  }
+
+  fields.push(
+    {
+      id:               'email',
+      displayName:      'Email',
+      required:         false,
+      defaultMatch:     false,
+      display:          true,
+      type:             'string',
+      canBeUsedToMatch: true,
+    },
+    {
+      id:               'phone',
+      displayName:      'Phone',
+      required:         false,
+      defaultMatch:     false,
+      display:          true,
+      type:             'string',
+      canBeUsedToMatch: false,
+    },
+    {
+      id:               'status',
+      displayName:      'Status',
+      required:         false,
+      defaultMatch:     false,
+      display:          true,
+      type:             'string',
+      canBeUsedToMatch: false,
+    },
+  )
+
+  // Append dynamic custom fields from the coach's Brixfit account
+  for (const f of rawFields) {
+    // Skip if already in standard fields above
+    if (['email', 'phone', 'status', 'name'].includes(f.field_key)) continue
+
+    fields.push({
+      id:               f.field_key,
+      displayName:      f.label,
+      required:         f.is_required ?? false,
+      defaultMatch:     false,
+      display:          true,
+      type:             typeMap[f.field_type] ?? 'string',
+      canBeUsedToMatch: false,
+    })
+  }
+
+  return { fields }
 }
