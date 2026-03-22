@@ -75,7 +75,7 @@ In n8n, go to **Credentials → New** and search for **Brixfit API**.
 | **API Key** | Your key from Brixfit → Developer → API Keys |
 | **Base URL** | `https://brixfit.app` (leave as default) |
 
-Click **Save** — n8n will automatically test the connection with a live API call and confirm your key is valid.
+Click **Save** — n8n automatically tests the connection with a live API call and confirms your key is valid before saving.
 
 ### 2. Add the Brixfit node to a workflow
 
@@ -89,7 +89,7 @@ Drag **Brixfit Trigger** as the first node in your workflow:
 2. **Activate** the workflow — n8n generates a webhook URL
 3. Copy that URL
 4. Go to **Brixfit → Developer → Webhooks → Create**
-5. Paste the URL, select the same events, copy the secret
+5. Paste the URL, select the same events, and copy the signing secret
 6. Paste the secret back into the trigger node
 
 ---
@@ -100,14 +100,14 @@ Drag **Brixfit Trigger** as the first node in your workflow:
 
 | Operation | Description |
 |-----------|-------------|
-| **Get All** | List leads with optional search, status filter, pagination |
+| **Get All** | List leads with optional search, status filter, sort, and pagination |
 | **Get** | Fetch a single lead by ID |
 | **Create** | Create a new lead — fields are dynamically loaded from your Brixfit account |
 | **Update** | Update lead fields — same dynamic field loading |
 | **Update Status** | Move a lead to a different pipeline status |
 | **Delete** | Permanently delete a lead |
 
-> 💡 **Dynamic fields**: When you create or update a lead, the node automatically fetches your custom field definitions from Brixfit and shows them as individual inputs. Click **Refresh** to reload after adding new fields.
+> **Dynamic fields**: When you create or update a lead, the node automatically fetches your custom field definitions from Brixfit and shows them as individual inputs. Click **Refresh** to reload after adding new fields.
 
 ### Client
 
@@ -117,13 +117,13 @@ Drag **Brixfit Trigger** as the first node in your workflow:
 | **Get** | Fetch a single client by ID |
 | **Update** | Update account status, goal, phone, end date or notes |
 | **Deactivate** | Deactivate a client account |
-| **Get Check-ins** | Fetch all check-ins for a specific client |
+| **Get Check-ins** | Fetch all check-ins for a specific client, with status and date filters |
 
 ### Check-in
 
 | Operation | Description |
 |-----------|-------------|
-| **Get All** | List check-ins with filters (status, date range, client) |
+| **Get All** | List check-ins with filters (status, date range, client ID, pagination) |
 | **Get by Client** | Fetch all check-ins for a specific client ID |
 
 ### Webhook
@@ -152,7 +152,7 @@ The **Brixfit Trigger** node starts your workflow when any of these events fire:
 | `checkin.submitted` | A client submits a check-in |
 | `*` | All events |
 
-All payloads are HMAC-SHA256 signed. If you set a **Webhook Secret**, the node verifies the signature automatically using constant-time comparison and rejects any tampered or unsigned requests.
+All payloads are **HMAC-SHA256 signed**. If you set a Webhook Secret, the node verifies the signature using the original raw bytes and constant-time comparison — tampered or unsigned requests are automatically rejected.
 
 ---
 
@@ -179,7 +179,7 @@ Brixfit Trigger (lead.created)
 ```
 Brixfit Trigger (checkin.submitted)
   → Slack: Send message to #coach-alerts
-        "{{ $json.client_name }} just submitted their check-in ✅"
+        "{{ $json.client_name }} just submitted their check-in"
 ```
 
 ### 4. Daily check-in report → Email
@@ -219,6 +219,18 @@ When creating or updating leads via this node, Brixfit automatically:
 
 ---
 
+## Security
+
+This node follows security best practices out of the box:
+
+- **HMAC-SHA256 webhook verification** — uses raw request bytes and constant-time comparison
+- **SSRF protection** — Base URL is validated; private/internal network addresses are rejected
+- **Path traversal prevention** — all ID parameters are validated against an allowlist before use in URLs
+- **30-second request timeout** — prevents n8n executions from hanging on slow API responses
+- **Live credential testing** — API key is verified immediately on Save
+
+---
+
 ## Resources
 
 - [Brixfit website](https://brixfit.app)
@@ -236,9 +248,9 @@ See the [CHANGELOG](CHANGELOG/) folder for full version history.
 
 | Version | Date | Summary |
 |---------|------|---------|
-| [v1.2.0](CHANGELOG/v1.2.0-2026-03-22.md) | 2026-03-22 | Security hardening, request timeouts, credential testing, item correlation fixes |
-| v1.1.0 | — | Dynamic lead fields, client update/deactivate, check-in by client |
-| v1.0.0 | — | Initial release |
+| [v1.2.0](CHANGELOG/v1.2.0-2026-03-22.md) | 2026-03-22 | Security hardening, reliability improvements, credential testing, UI fixes |
+| v1.1.0 | 2026-03-21 | Dynamic lead fields, client update/deactivate, check-in by client |
+| v1.0.0 | 2026-03-21 | Initial release |
 
 ---
 
