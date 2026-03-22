@@ -6,6 +6,7 @@
 [![npm version](https://img.shields.io/npm/v/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
 [![npm downloads](https://img.shields.io/npm/dm/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+[![Changelog](https://img.shields.io/badge/Changelog-v1.2.0-22c55e?style=for-the-badge)](CHANGELOG/v1.2.0-2026-03-22.md)
 
 **Official n8n community node for [Brixfit](https://brixfit.app) — the AI-powered Coaching CRM for fitness coaches.**
 
@@ -73,6 +74,8 @@ In n8n, go to **Credentials → New** and search for **Brixfit API**.
 |-------|-------|
 | **API Key** | Your key from Brixfit → Developer → API Keys |
 | **Base URL** | `https://brixfit.app` (leave as default) |
+
+Click **Save** — n8n will automatically test the connection with a live API call and confirm your key is valid.
 
 ### 2. Add the Brixfit node to a workflow
 
@@ -149,7 +152,7 @@ The **Brixfit Trigger** node starts your workflow when any of these events fire:
 | `checkin.submitted` | A client submits a check-in |
 | `*` | All events |
 
-All payloads are HMAC-SHA256 signed. If you set a **Webhook Secret**, the node verifies the signature automatically and rejects tampered requests.
+All payloads are HMAC-SHA256 signed. If you set a **Webhook Secret**, the node verifies the signature automatically using constant-time comparison and rejects any tampered or unsigned requests.
 
 ---
 
@@ -222,7 +225,20 @@ When creating or updating leads via this node, Brixfit automatically:
 - [API documentation](https://brixfit.app/coach/developer)
 - [npm package](https://www.npmjs.com/package/n8n-nodes-brixfit)
 - [GitHub repository](https://github.com/jatinbenivval/n8n-nodes-brixfit)
+- [Changelog](CHANGELOG/v1.2.0-2026-03-22.md)
 - [Report issues](https://github.com/jatinbenivval/n8n-nodes-brixfit/issues)
+
+---
+
+## Changelog
+
+See the [CHANGELOG](CHANGELOG/) folder for full version history.
+
+| Version | Date | Summary |
+|---------|------|---------|
+| [v1.2.0](CHANGELOG/v1.2.0-2026-03-22.md) | 2026-03-22 | Security hardening, request timeouts, credential testing, item correlation fixes |
+| v1.1.0 | — | Dynamic lead fields, client update/deactivate, check-in by client |
+| v1.0.0 | — | Initial release |
 
 ---
 
