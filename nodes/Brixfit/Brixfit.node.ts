@@ -4,12 +4,59 @@ import type {
   INodeExecutionData,
   INodeType,
   INodeTypeDescription,
+  INode,
   IRequestOptions,
   IDataObject,
   ResourceMapperFields,
   ResourceMapperField,
 } from 'n8n-workflow'
 import { NodeOperationError } from 'n8n-workflow'
+
+// ── Security constants ───────────────────────────────────────────────────────
+const REQUEST_TIMEOUT_MS = 30_000
+
+// C4 FIX: Validate and sanitize the baseUrl credential before use.
+// Blocks SSRF attacks — prevents pointing the node at cloud metadata services,
+// internal network hosts, or non-HTTP protocols.
+function validateBaseUrl(raw: string, node: INode): string {
+  const url = String(raw ?? '').trim().replace(/\/$/, '')
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new NodeOperationError(node, `Invalid Base URL: "${url}" is not a valid URL. Check your credential settings.`)
+  }
+  if (!['https:', 'http:'].includes(parsed.protocol)) {
+    throw new NodeOperationError(node, `Invalid Base URL: protocol must be http or https, got "${parsed.protocol}"`)
+  }
+  const h = parsed.hostname.toLowerCase()
+  const blocked = ['localhost', '127.', '0.', '169.254.', '::1', '[::1]']
+  const blockedPrefixes = ['10.', '192.168.']
+  const is172 = /^172\.(1[6-9]|2\d|3[01])\./.test(h)
+  if (blocked.some(b => h === b || h.startsWith(b)) || blockedPrefixes.some(b => h.startsWith(b)) || is172) {
+    throw new NodeOperationError(node, `Invalid Base URL: private/internal network addresses are not allowed.`)
+  }
+  return url
+}
+
+// C3 FIX: Validate resource ID parameters before interpolating into URLs.
+// Blocks path traversal ("../webhooks"), query injection ("id?foo=bar"),
+// and empty-string bugs that hit the wrong endpoint.
+function validateId(raw: string, label: string, node: INode, itemIndex: number): string {
+  const id = String(raw ?? '').trim()
+  if (!id) {
+    throw new NodeOperationError(node, `${label} cannot be empty`, { itemIndex })
+  }
+  // Allow UUIDs, numeric IDs, slugs — block any path/query special chars
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(id)) {
+    throw new NodeOperationError(
+      node as never,
+      `${label} contains invalid characters. Expected a plain ID (letters, numbers, hyphens, underscores).`,
+      { itemIndex },
+    )
+  }
+  return id
+}
 
 export class Brixfit implements INodeType {
   description: INodeTypeDescription = {
@@ -365,17 +412,19 @@ export class Brixfit implements INodeType {
     const items      = this.getInputData()
     const returnData: INodeExecutionData[] = []
     const credentials = await this.getCredentials('brixfitApi')
-    const baseUrl     = `${credentials.baseUrl}/api/public/v1`
-    const headers     = {
-      'Content-Type': 'application/json',
-      'X-API-Key': credentials.apiKey as string,
-    }
+    // C4 FIX: validateBaseUrl blocks SSRF — rejects private IPs, non-http protocols
+    const baseUrl     = validateBaseUrl(credentials.baseUrl as string, this.getNode()) + '/api/public/v1'
 
     for (let i = 0; i < items.length; i++) {
       const resource  = this.getNodeParameter('resource', i) as string
       const operation = this.getNodeParameter('operation', i) as string
 
-      let requestOptions: IRequestOptions = { method: 'GET', url: '', headers, json: true }
+      // Fresh headers per iteration — avoid shared object mutation across items
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-API-Key': credentials.apiKey as string,
+      }
+      let requestOptions: IRequestOptions = { method: 'GET', url: '', headers, json: true, timeout: REQUEST_TIMEOUT_MS }
 
       try {
         // ── LEAD ──────────────────────────────────────────────────────────────
@@ -386,7 +435,7 @@ export class Brixfit implements INodeType {
             requestOptions = { ...requestOptions, url: `${baseUrl}/leads`, qs }
 
           } else if (operation === 'get') {
-            const id = this.getNodeParameter('leadId', i) as string
+            const id = validateId(this.getNodeParameter('leadId', i) as string, 'Lead ID', this.getNode(), i)
             requestOptions = { ...requestOptions, url: `${baseUrl}/leads/${id}` }
 
           } else if (operation === 'create') {
@@ -401,18 +450,18 @@ export class Brixfit implements INodeType {
             }
 
           } else if (operation === 'update') {
-            const id = this.getNodeParameter('leadId', i) as string
+            const id = validateId(this.getNodeParameter('leadId', i) as string, 'Lead ID', this.getNode(), i)
             const mapperData = this.getNodeParameter('leadUpdateFields', i, { mappingMode: 'defineBelow', value: null }) as { value: Record<string, unknown> | null }
             const body = (mapperData.value ?? {}) as IDataObject
             requestOptions = { ...requestOptions, method: 'PATCH', url: `${baseUrl}/leads/${id}`, body }
 
           } else if (operation === 'updateStatus') {
-            const id     = this.getNodeParameter('leadId', i) as string
+            const id     = validateId(this.getNodeParameter('leadId', i) as string, 'Lead ID', this.getNode(), i)
             const status = this.getNodeParameter('status', i) as string
             requestOptions = { ...requestOptions, method: 'PATCH', url: `${baseUrl}/leads/${id}`, body: { status } as IDataObject }
 
           } else if (operation === 'delete') {
-            const id = this.getNodeParameter('leadId', i) as string
+            const id = validateId(this.getNodeParameter('leadId', i) as string, 'Lead ID', this.getNode(), i)
             requestOptions = { ...requestOptions, method: 'DELETE', url: `${baseUrl}/leads/${id}` }
           }
 
@@ -424,21 +473,21 @@ export class Brixfit implements INodeType {
             requestOptions = { ...requestOptions, url: `${baseUrl}/clients`, qs }
 
           } else if (operation === 'get') {
-            const id = this.getNodeParameter('clientId', i) as string
+            const id = validateId(this.getNodeParameter('clientId', i) as string, 'Client ID', this.getNode(), i)
             requestOptions = { ...requestOptions, url: `${baseUrl}/clients/${id}` }
 
           } else if (operation === 'update') {
-            const id   = this.getNodeParameter('clientId', i) as string
+            const id   = validateId(this.getNodeParameter('clientId', i) as string, 'Client ID', this.getNode(), i)
             const body = this.getNodeParameter('clientUpdateFields', i, {}) as IDataObject
             const clean = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== '' && v !== null)) as IDataObject
             requestOptions = { ...requestOptions, method: 'PATCH', url: `${baseUrl}/clients/${id}`, body: clean }
 
           } else if (operation === 'deactivate') {
-            const id = this.getNodeParameter('clientId', i) as string
+            const id = validateId(this.getNodeParameter('clientId', i) as string, 'Client ID', this.getNode(), i)
             requestOptions = { ...requestOptions, method: 'DELETE', url: `${baseUrl}/clients/${id}` }
 
           } else if (operation === 'getCheckins') {
-            const clientId = this.getNodeParameter('clientId', i) as string
+            const clientId = validateId(this.getNodeParameter('clientId', i) as string, 'Client ID', this.getNode(), i)
             const opts     = this.getNodeParameter('checkinClientOptions', i, {}) as IDataObject
             const qs: IDataObject = { client_id: clientId }
             if (opts.status)    qs.status    = opts.status
@@ -457,7 +506,7 @@ export class Brixfit implements INodeType {
             requestOptions = { ...requestOptions, url: `${baseUrl}/checkins`, qs }
 
           } else if (operation === 'getByClient') {
-            const clientId = this.getNodeParameter('checkinClientId', i) as string
+            const clientId = validateId(this.getNodeParameter('checkinClientId', i) as string, 'Client ID', this.getNode(), i)
             const opts     = this.getNodeParameter('checkinClientOptions', i, {}) as IDataObject
             const qs: IDataObject = { client_id: clientId }
             if (opts.status)    qs.status    = opts.status
@@ -485,7 +534,7 @@ export class Brixfit implements INodeType {
             }
 
           } else if (operation === 'delete') {
-            const id = this.getNodeParameter('webhookId', i) as string
+            const id = validateId(this.getNodeParameter('webhookId', i) as string, 'Webhook ID', this.getNode(), i)
             requestOptions = { ...requestOptions, method: 'DELETE', url: `${baseUrl}/webhooks/${id}` }
           }
         }
@@ -495,9 +544,9 @@ export class Brixfit implements INodeType {
         const result   = parsed.data ?? parsed
 
         if (Array.isArray(result)) {
-          result.forEach((item: IDataObject) => returnData.push({ json: item }))
+          result.forEach((item: IDataObject) => returnData.push({ json: item, pairedItem: { item: i } }))
         } else {
-          returnData.push({ json: result as IDataObject })
+          returnData.push({ json: result as IDataObject, pairedItem: { item: i } })
         }
 
       } catch (err) {

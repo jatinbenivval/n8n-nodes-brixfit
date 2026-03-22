@@ -1,4 +1,4 @@
-import type { ICredentialType, INodeProperties } from 'n8n-workflow'
+import type { ICredentialType, ICredentialTestRequest, INodeProperties } from 'n8n-workflow'
 
 export class BrixfitApi implements ICredentialType {
   name = 'brixfitApi'
@@ -25,4 +25,27 @@ export class BrixfitApi implements ICredentialType {
       description: 'Leave as-is unless you are using a self-hosted Brixfit instance.',
     },
   ]
+
+  // Fires a real HTTP call when the user clicks "Save" / "Test connection" in n8n.
+  // A 200 response = credential valid. A 401/403 = bad API key.
+  test: ICredentialTestRequest = {
+    request: {
+      baseURL: '={{$credentials.baseUrl}}',
+      url: '/api/public/v1/leads',
+      headers: {
+        'X-API-Key': '={{$credentials.apiKey}}',
+      },
+      qs: { per_page: 1 },
+    },
+    rules: [
+      {
+        type: 'responseSuccessBody',
+        properties: {
+          key: 'error',
+          value: null,
+          message: 'Connected successfully to Brixfit API',
+        },
+      },
+    ],
+  }
 }

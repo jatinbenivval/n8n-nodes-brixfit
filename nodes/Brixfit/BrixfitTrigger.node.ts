@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from 'crypto'
 import type {
   IHookFunctions,
   IWebhookFunctions,
@@ -97,32 +98,47 @@ export class BrixfitTrigger implements INodeType {
   }
 
   async webhook(this: IWebhookFunctions): Promise<IWebhookResponseData> {
-    const req          = this.getRequestObject()
-    const body         = this.getBodyData()
-    const secret       = this.getNodeParameter('webhookSecret', '') as string
+    const req           = this.getRequestObject()
+    const body          = this.getBodyData()
+    const secret        = this.getNodeParameter('webhookSecret', '') as string
     const allowedEvents = this.getNodeParameter('events', ['*']) as string[]
 
     // ── Signature verification (if secret configured) ──────────────────────
     if (secret) {
       const signature = (req.headers['x-brixfit-signature'] as string) ?? ''
-      const rawBody   = JSON.stringify(body)
 
-      // Compute expected HMAC-SHA256 signature
-      const enc     = new TextEncoder()
-      const keyData = enc.encode(secret)
-      const msgData = enc.encode(rawBody)
+      // C1 FIX: Use the raw request bytes for HMAC computation.
+      // n8n's getBodyData() returns an already-parsed object — JSON.stringify()
+      // on that object can produce different bytes (key order, whitespace) than
+      // the original payload that was signed. We use req.rawBody (a Buffer set
+      // by n8n's Express middleware) to get the exact original bytes.
+      // Fallback to JSON.stringify only if rawBody is unavailable (older n8n).
+      const rawReq  = req as unknown as { rawBody?: Buffer | string }
+      const rawBody = rawReq.rawBody != null
+        ? (Buffer.isBuffer(rawReq.rawBody)
+            ? rawReq.rawBody.toString('utf8')
+            : String(rawReq.rawBody))
+        : JSON.stringify(body)
 
-      const cryptoKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-      const sigBytes  = await crypto.subtle.sign('HMAC', cryptoKey, msgData)
-      const expected  = 'sha256=' + Array.from(new Uint8Array(sigBytes)).map(b => b.toString(16).padStart(2, '0')).join('')
+      // C1 FIX: Use Node.js crypto (synchronous, available in all n8n versions)
+      // instead of the async Web Crypto API (crypto.subtle) which is not
+      // guaranteed to be available in all n8n runtime environments.
+      const expected = 'sha256=' + createHmac('sha256', secret).update(rawBody).digest('hex')
 
-      if (signature !== expected) {
+      // C2 FIX: Timing-safe comparison via timingSafeEqual.
+      // String !== comparison is not constant-time — an attacker who can measure
+      // response latency can enumerate the correct HMAC byte-by-byte.
+      const sigBuf = Buffer.from(signature)
+      const expBuf = Buffer.from(expected)
+      const valid  = sigBuf.length === expBuf.length && timingSafeEqual(sigBuf, expBuf)
+
+      if (!valid) {
         return { webhookResponse: { status: 401, body: JSON.stringify({ error: 'Invalid signature' }) } }
       }
     }
 
     // ── Event filtering ────────────────────────────────────────────────────
-    const event = (body as IDataObject).event as string
+    const event     = (body as IDataObject).event as string
     const listenAll = allowedEvents.includes('*')
 
     if (!listenAll && !allowedEvents.includes(event)) {

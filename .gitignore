@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Private audit notes — never commit
+PRIVATE_FIX_NOTES.md
+AUDIT_REPORT.md
+CRITICAL_AUDIT.md
