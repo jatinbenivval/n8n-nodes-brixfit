@@ -28,7 +28,7 @@ export class BrixfitTrigger implements INodeType {
     defaults: { name: 'Brixfit Trigger' },
     inputs: [],
     outputs: ['main'],
-    credentials: [{ name: 'brixfitApi', required: false }],
+    credentials: [{ name: 'brixfitApi', required: true }],
     webhooks: [
       {
         name: 'default',

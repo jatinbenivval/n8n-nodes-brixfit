@@ -30,10 +30,16 @@ function validateBaseUrl(raw: string, node: INode): string {
     throw new NodeOperationError(node, `Invalid Base URL: protocol must be http or https, got "${parsed.protocol}"`)
   }
   const h = parsed.hostname.toLowerCase()
-  const blocked = ['localhost', '127.', '0.', '169.254.', '::1', '[::1]']
-  const blockedPrefixes = ['10.', '192.168.']
-  const is172 = /^172\.(1[6-9]|2\d|3[01])\./.test(h)
-  if (blocked.some(b => h === b || h.startsWith(b)) || blockedPrefixes.some(b => h.startsWith(b)) || is172) {
+  // Exact hostname matches (not prefix — avoids false-positives on domains like 127th-regiment.example.com)
+  const blockedHosts = new Set(['localhost', '::1', '[::1]'])
+  // Full IPv4 octet-boundary checks
+  const isLoopback   = /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)
+  const isZeroNet    = /^0\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)
+  const isLinkLocal  = /^169\.254\.\d{1,3}\.\d{1,3}$/.test(h)
+  const is10Net      = /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)
+  const is192168     = /^192\.168\.\d{1,3}\.\d{1,3}$/.test(h)
+  const is172        = /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(h)
+  if (blockedHosts.has(h) || isLoopback || isZeroNet || isLinkLocal || is10Net || is192168 || is172) {
     throw new NodeOperationError(node, `Invalid Base URL: private/internal network addresses are not allowed.`)
   }
   return url
@@ -303,7 +309,35 @@ export class Brixfit implements INodeType {
         ],
       },
 
-      // ── List filters (shared getAll) ───────────────────────────────────────
+      // ── Client: Get Check-ins options (H3 FIX: separate param so filters are visible) ──
+      {
+        displayName: 'Options',
+        name: 'clientCheckinOptions',
+        type: 'collection',
+        placeholder: 'Add Option',
+        displayOptions: { show: { resource: ['client'], operation: ['getCheckins'] } },
+        default: {},
+        options: [
+          {
+            displayName: 'Status',
+            name: 'status',
+            type: 'options',
+            options: [
+              { name: 'All',       value: '' },
+              { name: 'Completed', value: 'completed' },
+              { name: 'Pending',   value: 'pending'   },
+              { name: 'Reviewed',  value: 'reviewed'  },
+            ],
+            default: '',
+          },
+          { displayName: 'From Date', name: 'from_date', type: 'string', default: '', description: 'YYYY-MM-DD' },
+          { displayName: 'To Date',   name: 'to_date',   type: 'string', default: '', description: 'YYYY-MM-DD' },
+          { displayName: 'Page',      name: 'page',      type: 'number', default: 1  },
+          { displayName: 'Per Page',  name: 'per_page',  type: 'number', default: 20 },
+        ],
+      },
+
+      // ── List filters — lead / client only (M2 FIX: excluded from webhook getAll) ────
       {
         displayName: 'Filters',
         name: 'filters',
@@ -311,39 +345,53 @@ export class Brixfit implements INodeType {
         placeholder: 'Add Filter',
         displayOptions: {
           show: {
+            resource: ['lead', 'client'],
             operation: ['getAll'],
           },
         },
         default: {},
         options: [
-          { displayName: 'Search',    name: 'search',    type: 'string', default: '' },
+          { displayName: 'Search',   name: 'search',   type: 'string', default: '' },
+          { displayName: 'Status',   name: 'status',   type: 'string', default: '' },
+          { displayName: 'Page',     name: 'page',     type: 'number', default: 1  },
+          { displayName: 'Per Page', name: 'per_page', type: 'number', default: 20 },
+          // M3 FIX: sort exposed for leads
+          {
+            displayName: 'Sort',
+            name: 'sort',
+            type: 'options',
+            displayOptions: { show: { '/resource': ['lead'] } },
+            options: [
+              { name: 'Created (Newest First)', value: 'created_desc' },
+              { name: 'Created (Oldest First)', value: 'created_asc'  },
+              { name: 'Name (A–Z)',             value: 'name_asc'     },
+              { name: 'Name (Z–A)',             value: 'name_desc'    },
+            ],
+            default: 'created_desc',
+          },
+        ],
+      },
+
+      // ── List filters — checkin getAll ─────────────────────────────────────
+      {
+        displayName: 'Filters',
+        name: 'filters',
+        type: 'collection',
+        placeholder: 'Add Filter',
+        displayOptions: {
+          show: {
+            resource: ['checkin'],
+            operation: ['getAll'],
+          },
+        },
+        default: {},
+        options: [
+          { displayName: 'Client ID', name: 'client_id', type: 'string', default: '' },
           { displayName: 'Status',    name: 'status',    type: 'string', default: '' },
+          { displayName: 'From Date', name: 'from_date', type: 'string', default: '', description: 'YYYY-MM-DD' },
+          { displayName: 'To Date',   name: 'to_date',   type: 'string', default: '', description: 'YYYY-MM-DD' },
           { displayName: 'Page',      name: 'page',      type: 'number', default: 1  },
           { displayName: 'Per Page',  name: 'per_page',  type: 'number', default: 20 },
-          // Check-in only filters
-          {
-            displayName: 'Client ID',
-            name: 'client_id',
-            type: 'string',
-            displayOptions: { show: { '/resource': ['checkin'] } },
-            default: '',
-          },
-          {
-            displayName: 'From Date',
-            name: 'from_date',
-            type: 'string',
-            displayOptions: { show: { '/resource': ['checkin'] } },
-            default: '',
-            description: 'YYYY-MM-DD',
-          },
-          {
-            displayName: 'To Date',
-            name: 'to_date',
-            type: 'string',
-            displayOptions: { show: { '/resource': ['checkin'] } },
-            default: '',
-            description: 'YYYY-MM-DD',
-          },
         ],
       },
 
@@ -431,7 +479,7 @@ export class Brixfit implements INodeType {
         if (resource === 'lead') {
           if (operation === 'getAll') {
             const filters = this.getNodeParameter('filters', i, {}) as IDataObject
-            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v !== 0)) as IDataObject
+            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v !== null && v !== undefined)) as IDataObject
             requestOptions = { ...requestOptions, url: `${baseUrl}/leads`, qs }
 
           } else if (operation === 'get') {
@@ -469,7 +517,7 @@ export class Brixfit implements INodeType {
         } else if (resource === 'client') {
           if (operation === 'getAll') {
             const filters = this.getNodeParameter('filters', i, {}) as IDataObject
-            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v !== 0)) as IDataObject
+            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v !== null && v !== undefined)) as IDataObject
             requestOptions = { ...requestOptions, url: `${baseUrl}/clients`, qs }
 
           } else if (operation === 'get') {
@@ -502,7 +550,7 @@ export class Brixfit implements INodeType {
         } else if (resource === 'checkin') {
           if (operation === 'getAll') {
             const filters = this.getNodeParameter('filters', i, {}) as IDataObject
-            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v !== 0)) as IDataObject
+            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v !== null && v !== undefined)) as IDataObject
             requestOptions = { ...requestOptions, url: `${baseUrl}/checkins`, qs }
 
           } else if (operation === 'getByClient') {
@@ -540,7 +588,21 @@ export class Brixfit implements INodeType {
         }
 
         const response = await this.helpers.request(requestOptions)
-        const parsed   = typeof response === 'string' ? JSON.parse(response) : response
+        // M4 FIX: wrap JSON.parse so a malformed API response gives a clear error instead of a cryptic SyntaxError
+        let parsed: IDataObject
+        if (typeof response === 'string') {
+          try {
+            parsed = JSON.parse(response) as IDataObject
+          } catch {
+            throw new NodeOperationError(
+              this.getNode(),
+              `Brixfit API returned a non-JSON response. This may indicate a server error or a proxy issue. Raw response (first 200 chars): ${response.slice(0, 200)}`,
+              { itemIndex: i },
+            )
+          }
+        } else {
+          parsed = response as IDataObject
+        }
         const result   = parsed.data ?? parsed
 
         if (Array.isArray(result)) {
@@ -579,9 +641,13 @@ async function loadLeadFieldsFromApi(
       json: true,
     }) as { data?: typeof rawFields }
     rawFields = response.data ?? []
-  } catch {
-    // Return minimal fields if API call fails (e.g. bad credentials)
-    rawFields = []
+  } catch (err) {
+    // H4 FIX: Surface the error so the user knows why the field list is empty.
+    // Previously this silently returned [] — masking bad credentials or network issues.
+    throw new Error(
+      `Failed to load lead fields from Brixfit API: ${err instanceof Error ? err.message : String(err)}. ` +
+      'Check that your API key is valid and that your Brixfit account has custom fields configured.'
+    )
   }
 
   const typeMap: Record<string, ResourceMapperField['type']> = {

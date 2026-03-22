@@ -27,7 +27,7 @@ export class BrixfitApi implements ICredentialType {
   ]
 
   // Fires a real HTTP call when the user clicks "Save" / "Test connection" in n8n.
-  // A 200 response = credential valid. A 401/403 = bad API key.
+  // HTTP 200 = credential valid. HTTP 401/403 = bad API key (n8n surfaces the error automatically).
   test: ICredentialTestRequest = {
     request: {
       baseURL: '={{$credentials.baseUrl}}',
@@ -37,15 +37,5 @@ export class BrixfitApi implements ICredentialType {
       },
       qs: { per_page: 1 },
     },
-    rules: [
-      {
-        type: 'responseSuccessBody',
-        properties: {
-          key: 'error',
-          value: null,
-          message: 'Connected successfully to Brixfit API',
-        },
-      },
-    ],
   }
 }
