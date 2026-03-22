@@ -6,7 +6,7 @@
 [![npm version](https://img.shields.io/npm/v/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
 [![npm downloads](https://img.shields.io/npm/dm/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
-[![Changelog](https://img.shields.io/badge/Changelog-v1.2.0-22c55e?style=for-the-badge)](CHANGELOG/v1.2.0-2026-03-22.md)
+[![Changelog](https://img.shields.io/badge/Changelog-v1.2.1-22c55e?style=for-the-badge)](CHANGELOG/v1.2.1-2026-03-22.md)
 
 **Official n8n community node for [Brixfit](https://brixfit.app) — the AI-powered Coaching CRM for fitness coaches.**
 
@@ -248,6 +248,7 @@ See the [CHANGELOG](CHANGELOG/) folder for full version history.
 
 | Version | Date | Summary |
 |---------|------|---------|
+| [v1.2.1](CHANGELOG/v1.2.1-2026-03-22.md) | 2026-03-22 | Complete reliability + UI fixes: error surfacing, filter preservation, JSON error handling |
 | [v1.2.0](CHANGELOG/v1.2.0-2026-03-22.md) | 2026-03-22 | Security hardening, reliability improvements, credential testing, UI fixes |
 | v1.1.0 | 2026-03-21 | Dynamic lead fields, client update/deactivate, check-in by client |
 | v1.0.0 | 2026-03-21 | Initial release |
