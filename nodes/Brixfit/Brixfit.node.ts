@@ -151,9 +151,10 @@ export class Brixfit implements INodeType {
         noDataExpression: true,
         displayOptions: { show: { resource: ['webhook'] } },
         options: [
-          { name: 'Create',  value: 'create',  description: 'Register a new webhook', action: 'Create a webhook' },
-          { name: 'Get All', value: 'getAll',  description: 'List all webhooks',      action: 'Get all webhooks' },
-          { name: 'Delete',  value: 'delete',  description: 'Remove a webhook',       action: 'Delete a webhook' },
+          { name: 'Create',          value: 'create',         description: 'Register a new webhook',     action: 'Create a webhook'         },
+          { name: 'Get All',         value: 'getAll',         description: 'List all webhooks',           action: 'Get all webhooks'         },
+          { name: 'Enable / Disable', value: 'toggleActive',  description: 'Enable or disable a webhook', action: 'Enable or disable a webhook' },
+          { name: 'Delete',          value: 'delete',         description: 'Remove a webhook',            action: 'Delete a webhook'         },
         ],
         default: 'getAll',
       },
@@ -401,8 +402,20 @@ export class Brixfit implements INodeType {
         name: 'webhookId',
         type: 'string',
         required: true,
-        displayOptions: { show: { resource: ['webhook'], operation: ['delete'] } },
+        displayOptions: { show: { resource: ['webhook'], operation: ['delete', 'toggleActive'] } },
         default: '',
+        description: 'The unique ID of the webhook',
+      },
+
+      // ── Webhook enable/disable ─────────────────────────────────────────────
+      {
+        displayName: 'Active',
+        name: 'webhookIsActive',
+        type: 'boolean',
+        required: true,
+        displayOptions: { show: { resource: ['webhook'], operation: ['toggleActive'] } },
+        default: true,
+        description: 'Whether to enable (true) or disable (false) this webhook',
       },
 
       // ── Webhook create ─────────────────────────────────────────────────────
@@ -580,6 +593,11 @@ export class Brixfit implements INodeType {
               url: `${baseUrl}/webhooks`,
               body: { url, events, description: desc || undefined } as IDataObject,
             }
+
+          } else if (operation === 'toggleActive') {
+            const id       = validateId(this.getNodeParameter('webhookId', i) as string, 'Webhook ID', this.getNode(), i)
+            const isActive = this.getNodeParameter('webhookIsActive', i) as boolean
+            requestOptions = { ...requestOptions, method: 'PATCH', url: `${baseUrl}/webhooks/${id}`, body: { is_active: isActive } as IDataObject }
 
           } else if (operation === 'delete') {
             const id = validateId(this.getNodeParameter('webhookId', i) as string, 'Webhook ID', this.getNode(), i)

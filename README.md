@@ -6,7 +6,7 @@
 [![npm version](https://img.shields.io/npm/v/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
 [![npm downloads](https://img.shields.io/npm/dm/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
-[![Changelog](https://img.shields.io/badge/Changelog-v1.2.1-22c55e?style=for-the-badge)](CHANGELOG/v1.2.1-2026-03-22.md)
+[![Changelog](https://img.shields.io/badge/Changelog-v1.2.2-22c55e?style=for-the-badge)](CHANGELOG/v1.2.2-2026-03-26.md)
 
 **Official n8n community node for [Brixfit](https://brixfit.app) — the AI-powered Coaching CRM for fitness coaches.**
 
@@ -132,6 +132,7 @@ Drag **Brixfit Trigger** as the first node in your workflow:
 |-----------|-------------|
 | **Get All** | List all registered webhooks |
 | **Create** | Register a new webhook endpoint |
+| **Enable / Disable** | Toggle a webhook's `is_active` state without deleting it |
 | **Delete** | Remove a webhook |
 
 ---
@@ -237,7 +238,7 @@ This node follows security best practices out of the box:
 - [API documentation](https://brixfit.app/coach/developer)
 - [npm package](https://www.npmjs.com/package/n8n-nodes-brixfit)
 - [GitHub repository](https://github.com/jatinbenivval/n8n-nodes-brixfit)
-- [Changelog](CHANGELOG/v1.2.0-2026-03-22.md)
+- [Changelog](CHANGELOG/v1.2.2-2026-03-26.md)
 - [Report issues](https://github.com/jatinbenivval/n8n-nodes-brixfit/issues)
 
 ---
@@ -248,6 +249,7 @@ See the [CHANGELOG](CHANGELOG/) folder for full version history.
 
 | Version | Date | Summary |
 |---------|------|---------|
+| [v1.2.2](CHANGELOG/v1.2.2-2026-03-26.md) | 2026-03-26 | Webhook Enable/Disable operation — complete API coverage |
 | [v1.2.1](CHANGELOG/v1.2.1-2026-03-22.md) | 2026-03-22 | Complete reliability + UI fixes: error surfacing, filter preservation, JSON error handling |
 | [v1.2.0](CHANGELOG/v1.2.0-2026-03-22.md) | 2026-03-22 | Security hardening, reliability improvements, credential testing, UI fixes |
 | v1.1.0 | 2026-03-21 | Dynamic lead fields, client update/deactivate, check-in by client |
