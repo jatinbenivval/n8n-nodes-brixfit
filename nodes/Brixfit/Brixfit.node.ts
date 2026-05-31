@@ -34,7 +34,7 @@ export class Brixfit implements INodeType {
   description: INodeTypeDescription = {
     displayName: 'Brixfit',
     name: 'brixfit',
-    icon: 'file:brixfit.svg',
+    icon: 'file:icon.png',
     group: ['output'],
     version: 1,
     subtitle: '={{$parameter["resource"] + ": " + $parameter["operation"]}}',
@@ -48,7 +48,7 @@ export class Brixfit implements INodeType {
       categories: ['CRM'],
       subcategories: { CRM: ['Fitness & Coaching'] },
       resources: {
-        primaryDocumentation: [{ url: 'https://brixfit.app/docs/n8n' }],
+        primaryDocumentation: [{ url: 'https://brixfit.app/api-docs' }],
         credentialDocumentation: [{ url: 'https://brixfit.app/coach/developer' }],
       },
       alias: ['brixfit', 'coaching', 'fitness', 'crm', 'leads', 'clients'],

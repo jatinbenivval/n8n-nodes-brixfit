@@ -3,8 +3,8 @@ import type { ICredentialType, ICredentialTestRequest, INodeProperties } from 'n
 export class BrixfitApi implements ICredentialType {
   name = 'brixfitApi'
   displayName = 'Brixfit API'
-  documentationUrl = 'https://brixfit.app/coach/developer'
-  icon = 'file:brixfit.svg' as const
+  documentationUrl = 'https://brixfit.app/api-docs'
+  icon = 'file:icon.png' as const
 
   properties: INodeProperties[] = [
     {

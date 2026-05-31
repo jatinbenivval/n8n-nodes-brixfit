@@ -20,7 +20,7 @@ export class BrixfitTrigger implements INodeType {
   description: INodeTypeDescription = {
     displayName: 'Brixfit Trigger',
     name: 'brixfitTrigger',
-    icon: 'file:brixfit.svg',
+    icon: 'file:icon.png',
     group: ['trigger'],
     version: 1,
     description: 'Starts a workflow when a Brixfit event fires (lead created, status changed, check-in submitted, etc.)',
@@ -40,7 +40,7 @@ export class BrixfitTrigger implements INodeType {
       categories: ['CRM'],
       subcategories: { CRM: ['Fitness & Coaching'] },
       resources: {
-        primaryDocumentation: [{ url: 'https://brixfit.app/docs/n8n' }],
+        primaryDocumentation: [{ url: 'https://brixfit.app/api-docs' }],
         credentialDocumentation: [{ url: 'https://brixfit.app/coach/developer' }],
       },
       alias: ['brixfit', 'coaching', 'fitness', 'crm', 'leads', 'clients', 'trigger', 'webhook'],
