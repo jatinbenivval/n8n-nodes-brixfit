@@ -6,7 +6,7 @@
 [![npm version](https://img.shields.io/npm/v/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
 [![npm downloads](https://img.shields.io/npm/dm/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
-[![Changelog](https://img.shields.io/badge/Changelog-v1.3.0-22c55e?style=for-the-badge)](CHANGELOG/v1.3.0-2026-05-31.md)
+[![Changelog](https://img.shields.io/badge/Changelog-v1.3.1-22c55e?style=for-the-badge)](CHANGELOG/v1.3.1-2026-05-31.md)
 
 **Official n8n community node for [Brixfit](https://brixfit.app) — the AI-powered Coaching CRM for fitness coaches.**
 
@@ -156,9 +156,12 @@ The **Brixfit Trigger** node starts your workflow when any of these events fire:
 | `lead.deleted` | A lead is deleted |
 | `client.created` | A new client is onboarded |
 | `client.updated` | A client's details are updated |
+| `client.deleted` | A client account is deleted |
 | `checkin.submitted` | A client submits a check-in |
 
-All payloads are **HMAC-SHA256 signed**. The node verifies signatures using the original raw bytes and constant-time comparison — tampered or unsigned requests are automatically rejected with HTTP 401. The signing secret is stored internally after auto-registration; you never need to copy it manually.
+All payloads are **HMAC-SHA256 signed**. The node verifies signatures using the original raw bytes and constant-time comparison — tampered or unsigned requests are rejected with HTTP 401. Replay protection rejects requests older than 5 minutes (configurable). The signing secret is stored internally after auto-registration; you never need to copy it manually.
+
+**Output format:** payload fields are flattened to the top level so you can use `$json.name`, `$json.email`, `$json.id` directly in expressions. Meta fields are available as `$json._event`, `$json._timestamp`, `$json._coach_id`.
 
 ---
 
@@ -254,6 +257,7 @@ See the [CHANGELOG](CHANGELOG/) folder for full version history.
 
 | Version | Date | Summary |
 |---------|------|---------|
+| [v1.3.1](CHANGELOG/v1.3.1-2026-05-31.md) | 2026-05-31 | Trigger: flat output, replay protection, events auto-sync, options panel, client.deleted event |
 | [v1.3.0](CHANGELOG/v1.3.0-2026-05-31.md) | 2026-05-31 | Auto-registration, health reports, plan-gated metrics, Return All, dynamic statuses, 16 bug fixes |
 | [v1.2.2](CHANGELOG/v1.2.2-2026-03-26.md) | 2026-03-26 | Webhook Enable/Disable operation — complete API coverage |
 | [v1.2.1](CHANGELOG/v1.2.1-2026-03-22.md) | 2026-03-22 | Complete reliability + UI fixes: error surfacing, filter preservation, JSON error handling |
