@@ -7,3 +7,6 @@ dist/
 PRIVATE_FIX_NOTES.md
 AUDIT_REPORT.md
 CRITICAL_AUDIT.md
+
+# Feature planning — internal only
+new-feature.md
