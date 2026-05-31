@@ -7,16 +7,9 @@ import type {
   IWebhookResponseData,
   IDataObject,
 } from 'n8n-workflow'
+import { NodeConnectionTypes } from 'n8n-workflow'
+import { validateBaseUrl, REQUEST_TIMEOUT_MS } from './Brixfit.utils'
 
-/**
- * BrixfitTrigger — receives webhook events from Brixfit and starts n8n workflows.
- *
- * How it works:
- * 1. When you activate the workflow, n8n exposes a webhook URL
- * 2. You paste that URL in Brixfit → Developer → Webhooks (or via API)
- * 3. Brixfit POSTs signed payloads to your URL on every selected event
- * 4. This node validates the signature and passes the event data downstream
- */
 export class BrixfitTrigger implements INodeType {
   description: INodeTypeDescription = {
     displayName: 'Brixfit Trigger',
@@ -27,7 +20,7 @@ export class BrixfitTrigger implements INodeType {
     description: 'Starts a workflow when a Brixfit event fires (lead created, status changed, check-in submitted, etc.)',
     defaults: { name: 'Brixfit Trigger' },
     inputs: [],
-    outputs: ['main'],
+    outputs: [NodeConnectionTypes.Main],
     credentials: [{ name: 'brixfitApi', required: true }],
     webhooks: [
       {
@@ -37,6 +30,15 @@ export class BrixfitTrigger implements INodeType {
         path: 'webhook',
       },
     ],
+    codex: {
+      categories: ['CRM'],
+      subcategories: { CRM: ['Fitness & Coaching'] },
+      resources: {
+        primaryDocumentation: [{ url: 'https://brixfit.app/docs/n8n' }],
+        credentialDocumentation: [{ url: 'https://brixfit.app/coach/developer' }],
+      },
+      alias: ['brixfit', 'coaching', 'fitness', 'crm', 'leads', 'clients', 'trigger', 'webhook'],
+    },
     properties: [
       {
         displayName: 'Events to Listen For',
@@ -51,47 +53,97 @@ export class BrixfitTrigger implements INodeType {
           { name: 'Client Created',      value: 'client.created'      },
           { name: 'Client Updated',      value: 'client.updated'      },
           { name: 'Check-in Submitted',  value: 'checkin.submitted'   },
-          { name: 'All Events',          value: '*'                   },
         ],
         default: ['lead.created'],
         description: 'Which Brixfit events should trigger this workflow',
       },
       {
-        displayName: 'Webhook Secret',
+        displayName: 'Webhook Secret (Manual Override)',
         name: 'webhookSecret',
         type: 'string',
         typeOptions: { password: true },
         default: '',
-        description: 'The secret returned when you registered this webhook in Brixfit. Used to verify payload authenticity.',
-      },
-      {
-        displayName: 'Setup Instructions',
-        name: 'setupInstructions',
-        type: 'notice',
-        default: `
-**How to connect this trigger to Brixfit:**
-
-1. Activate this workflow to get your webhook URL (shown below)
-2. Copy the URL
-3. Go to **Brixfit → Developer → Webhooks** (or use the API)
-4. Create a new webhook with this URL and select the same events as above
-5. Copy the secret shown on creation and paste it in the "Webhook Secret" field above
-        `.trim(),
+        description: 'Leave blank — the webhook secret is managed automatically when this workflow is activated. Only set this if you have manually created a Brixfit webhook and want to reuse its secret.',
       },
     ],
   }
 
-  // Called when workflow is activated — nothing to do here since coach sets up
-  // the webhook manually in the Brixfit dashboard.
+  // ── Lifecycle hooks (auto-registration) ────────────────────────────────────
   webhookMethods = {
     default: {
       async checkExists(this: IHookFunctions): Promise<boolean> {
-        return false
+        const staticData = this.getWorkflowStaticData('node')
+        const webhookId  = staticData.webhookId as string | undefined
+        if (!webhookId) return false
+
+        const credentials = await this.getCredentials('brixfitApi')
+        const baseUrl     = validateBaseUrl(credentials.baseUrl as string, this.getNode()) + '/api/public/v1'
+        const apiKey      = credentials.apiKey as string
+
+        try {
+          const response = await this.helpers.request({
+            method: 'GET',
+            url: `${baseUrl}/webhooks`,
+            headers: { 'x-api-key': apiKey },
+            json: true,
+            timeout: REQUEST_TIMEOUT_MS,
+          })
+          const webhooks = (response?.data ?? []) as Array<{ id: string; is_active: boolean }>
+          return webhooks.some(w => w.id === webhookId && w.is_active)
+        } catch {
+          return false
+        }
       },
+
       async create(this: IHookFunctions): Promise<boolean> {
+        const webhookUrl = this.getNodeWebhookUrl('default')
+        const events     = this.getNodeParameter('events') as string[]
+
+        const credentials = await this.getCredentials('brixfitApi')
+        const baseUrl     = validateBaseUrl(credentials.baseUrl as string, this.getNode()) + '/api/public/v1'
+        const apiKey      = credentials.apiKey as string
+
+        const response = await this.helpers.request({
+          method: 'POST',
+          url: `${baseUrl}/webhooks`,
+          headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+          body: { url: webhookUrl, events, description: 'Created automatically by n8n' },
+          json: true,
+          timeout: REQUEST_TIMEOUT_MS,
+        })
+
+        const data = response?.data as { id?: string; secret?: string } | null
+        if (!data?.id) return false
+
+        const staticData            = this.getWorkflowStaticData('node')
+        staticData.webhookId        = data.id
+        staticData.webhookSecret    = data.secret ?? ''
         return true
       },
+
       async delete(this: IHookFunctions): Promise<boolean> {
+        const staticData = this.getWorkflowStaticData('node')
+        const webhookId  = staticData.webhookId as string | undefined
+        if (!webhookId) return true
+
+        const credentials = await this.getCredentials('brixfitApi')
+        const baseUrl     = validateBaseUrl(credentials.baseUrl as string, this.getNode()) + '/api/public/v1'
+        const apiKey      = credentials.apiKey as string
+
+        try {
+          await this.helpers.request({
+            method: 'DELETE',
+            url: `${baseUrl}/webhooks/${webhookId}`,
+            headers: { 'x-api-key': apiKey },
+            json: true,
+            timeout: REQUEST_TIMEOUT_MS,
+          })
+        } catch {
+          // Ignore errors — webhook may have been removed from the Brixfit dashboard already
+        }
+
+        delete staticData.webhookId
+        delete staticData.webhookSecret
         return true
       },
     },
@@ -100,19 +152,19 @@ export class BrixfitTrigger implements INodeType {
   async webhook(this: IWebhookFunctions): Promise<IWebhookResponseData> {
     const req           = this.getRequestObject()
     const body          = this.getBodyData()
-    const secret        = this.getNodeParameter('webhookSecret', '') as string
-    const allowedEvents = this.getNodeParameter('events', ['*']) as string[]
+    const allowedEvents = this.getNodeParameter('events', ['lead.created']) as string[]
 
-    // ── Signature verification (if secret configured) ──────────────────────
+    // Prefer the auto-registered secret; fall back to manual override field
+    const staticData   = this.getWorkflowStaticData('node')
+    const manualSecret = this.getNodeParameter('webhookSecret', '') as string
+    const secret       = (staticData.webhookSecret as string) || manualSecret
+
+    // ── Signature verification ──────────────────────────────────────────────
     if (secret) {
       const signature = (req.headers['x-brixfit-signature'] as string) ?? ''
 
-      // C1 FIX: Use the raw request bytes for HMAC computation.
-      // n8n's getBodyData() returns an already-parsed object — JSON.stringify()
-      // on that object can produce different bytes (key order, whitespace) than
-      // the original payload that was signed. We use req.rawBody (a Buffer set
-      // by n8n's Express middleware) to get the exact original bytes.
-      // Fallback to JSON.stringify only if rawBody is unavailable (older n8n).
+      // Use the original raw bytes for HMAC — JSON.stringify can produce different
+      // bytes (key order, whitespace) than the original signed payload.
       const rawReq  = req as unknown as { rawBody?: Buffer | string }
       const rawBody = rawReq.rawBody != null
         ? (Buffer.isBuffer(rawReq.rawBody)
@@ -120,14 +172,8 @@ export class BrixfitTrigger implements INodeType {
             : String(rawReq.rawBody))
         : JSON.stringify(body)
 
-      // C1 FIX: Use Node.js crypto (synchronous, available in all n8n versions)
-      // instead of the async Web Crypto API (crypto.subtle) which is not
-      // guaranteed to be available in all n8n runtime environments.
       const expected = 'sha256=' + createHmac('sha256', secret).update(rawBody).digest('hex')
 
-      // C2 FIX: Timing-safe comparison via timingSafeEqual.
-      // String !== comparison is not constant-time — an attacker who can measure
-      // response latency can enumerate the correct HMAC byte-by-byte.
       const sigBuf = Buffer.from(signature)
       const expBuf = Buffer.from(expected)
       const valid  = sigBuf.length === expBuf.length && timingSafeEqual(sigBuf, expBuf)
@@ -138,10 +184,9 @@ export class BrixfitTrigger implements INodeType {
     }
 
     // ── Event filtering ────────────────────────────────────────────────────
-    const event     = (body as IDataObject).event as string
-    const listenAll = allowedEvents.includes('*')
+    const event = (body as IDataObject).event as string
 
-    if (!listenAll && !allowedEvents.includes(event)) {
+    if (event && !allowedEvents.includes(event)) {
       return { webhookResponse: { status: 200, body: JSON.stringify({ ok: true, skipped: true }) } }
     }
 

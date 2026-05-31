@@ -6,7 +6,7 @@
 [![npm version](https://img.shields.io/npm/v/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
 [![npm downloads](https://img.shields.io/npm/dm/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
-[![Changelog](https://img.shields.io/badge/Changelog-v1.2.2-22c55e?style=for-the-badge)](CHANGELOG/v1.2.2-2026-03-26.md)
+[![Changelog](https://img.shields.io/badge/Changelog-v1.3.0-22c55e?style=for-the-badge)](CHANGELOG/v1.3.0-2026-05-31.md)
 
 **Official n8n community node for [Brixfit](https://brixfit.app) — the AI-powered Coaching CRM for fitness coaches.**
 
@@ -86,11 +86,11 @@ Drag the **Brixfit** node from the node panel and select your resource and opera
 Drag **Brixfit Trigger** as the first node in your workflow:
 
 1. Select the events you want to listen for
-2. **Activate** the workflow — n8n generates a webhook URL
-3. Copy that URL
-4. Go to **Brixfit → Developer → Webhooks → Create**
-5. Paste the URL, select the same events, and copy the signing secret
-6. Paste the secret back into the trigger node
+2. **Activate** the workflow — n8n automatically registers the webhook in Brixfit and stores the signing secret
+
+That's it — no manual copy-paste. When you deactivate the workflow, the webhook is automatically removed from Brixfit.
+
+> **Development note:** Brixfit requires HTTPS webhook URLs. For local development use a tunnel such as ngrok to expose your n8n instance.
 
 ---
 
@@ -100,30 +100,36 @@ Drag **Brixfit Trigger** as the first node in your workflow:
 
 | Operation | Description |
 |-----------|-------------|
-| **Get All** | List leads with optional search, status filter, sort, and pagination |
+| **Get All** | List leads with optional search, status filter, sort, and pagination. Enable **Return All** to auto-fetch every page. |
 | **Get** | Fetch a single lead by ID |
-| **Create** | Create a new lead — fields are dynamically loaded from your Brixfit account |
+| **Create** | Create a new lead — fields are dynamically loaded from your Brixfit account. Response includes plan-gated computed metrics (BMI, BMR, TDEE, body fat %). |
 | **Update** | Update lead fields — same dynamic field loading |
-| **Update Status** | Move a lead to a different pipeline status |
+| **Update Status** | Move a lead to a different pipeline status — stages are loaded dynamically from your account |
+| **Get Health Report** | Fetch the most recent AI health report for a lead, including plan-gated metrics and PDF download URL |
+| **List Health Reports** | Paginated list of all AI health reports for a lead |
 | **Delete** | Permanently delete a lead |
 
 > **Dynamic fields**: When you create or update a lead, the node automatically fetches your custom field definitions from Brixfit and shows them as individual inputs. Click **Refresh** to reload after adding new fields.
+>
+> **Plan-gated metrics**: Health metrics (BMI, BMR, TDEE, body fat %) in Create and health report responses are filtered to only include what your Brixfit plan allows.
 
 ### Client
 
 | Operation | Description |
 |-----------|-------------|
-| **Get All** | List clients with search and status filter |
+| **Get All** | List clients with search and status filter. Enable **Return All** to auto-fetch every page. |
 | **Get** | Fetch a single client by ID |
 | **Update** | Update account status, goal, phone, end date or notes |
 | **Deactivate** | Deactivate a client account |
 | **Get Check-ins** | Fetch all check-ins for a specific client, with status and date filters |
+| **Get Health Report** | Fetch the most recent AI health report for a client, including plan-gated metrics and PDF download URL |
+| **List Health Reports** | Paginated list of all AI health reports for a client |
 
 ### Check-in
 
 | Operation | Description |
 |-----------|-------------|
-| **Get All** | List check-ins with filters (status, date range, client ID, pagination) |
+| **Get All** | List check-ins with filters (status, date range, client ID, pagination). Enable **Return All** to auto-fetch every page. |
 | **Get by Client** | Fetch all check-ins for a specific client ID |
 
 ### Webhook
@@ -151,9 +157,8 @@ The **Brixfit Trigger** node starts your workflow when any of these events fire:
 | `client.created` | A new client is onboarded |
 | `client.updated` | A client's details are updated |
 | `checkin.submitted` | A client submits a check-in |
-| `*` | All events |
 
-All payloads are **HMAC-SHA256 signed**. If you set a Webhook Secret, the node verifies the signature using the original raw bytes and constant-time comparison — tampered or unsigned requests are automatically rejected.
+All payloads are **HMAC-SHA256 signed**. The node verifies signatures using the original raw bytes and constant-time comparison — tampered or unsigned requests are automatically rejected with HTTP 401. The signing secret is stored internally after auto-registration; you never need to copy it manually.
 
 ---
 
@@ -238,7 +243,7 @@ This node follows security best practices out of the box:
 - [API documentation](https://brixfit.app/coach/developer)
 - [npm package](https://www.npmjs.com/package/n8n-nodes-brixfit)
 - [GitHub repository](https://github.com/jatinbenivval/n8n-nodes-brixfit)
-- [Changelog](CHANGELOG/v1.2.2-2026-03-26.md)
+- [Changelog](CHANGELOG/v1.3.0-2026-05-31.md)
 - [Report issues](https://github.com/jatinbenivval/n8n-nodes-brixfit/issues)
 
 ---
@@ -249,6 +254,7 @@ See the [CHANGELOG](CHANGELOG/) folder for full version history.
 
 | Version | Date | Summary |
 |---------|------|---------|
+| [v1.3.0](CHANGELOG/v1.3.0-2026-05-31.md) | 2026-05-31 | Auto-registration, health reports, plan-gated metrics, Return All, dynamic statuses, 16 bug fixes |
 | [v1.2.2](CHANGELOG/v1.2.2-2026-03-26.md) | 2026-03-26 | Webhook Enable/Disable operation — complete API coverage |
 | [v1.2.1](CHANGELOG/v1.2.1-2026-03-22.md) | 2026-03-22 | Complete reliability + UI fixes: error surfacing, filter preservation, JSON error handling |
 | [v1.2.0](CHANGELOG/v1.2.0-2026-03-22.md) | 2026-03-22 | Security hardening, reliability improvements, credential testing, UI fixes |

@@ -9,59 +9,25 @@ import type {
   IDataObject,
   ResourceMapperFields,
   ResourceMapperField,
+  INodePropertyOptions,
 } from 'n8n-workflow'
-import { NodeOperationError } from 'n8n-workflow'
+import { NodeOperationError, NodeConnectionTypes } from 'n8n-workflow'
+import { validateBaseUrl, validateId, REQUEST_TIMEOUT_MS } from './Brixfit.utils'
 
-// ── Security constants ───────────────────────────────────────────────────────
-const REQUEST_TIMEOUT_MS = 30_000
-
-// C4 FIX: Validate and sanitize the baseUrl credential before use.
-// Blocks SSRF attacks — prevents pointing the node at cloud metadata services,
-// internal network hosts, or non-HTTP protocols.
-function validateBaseUrl(raw: string, node: INode): string {
-  const url = String(raw ?? '').trim().replace(/\/$/, '')
-  let parsed: URL
-  try {
-    parsed = new URL(url)
-  } catch {
-    throw new NodeOperationError(node, `Invalid Base URL: "${url}" is not a valid URL. Check your credential settings.`)
+// ── Parse API response helper ────────────────────────────────────────────────
+function parseApiResponse(response: unknown, node: INode, itemIndex: number): IDataObject {
+  if (typeof response === 'string') {
+    try {
+      return JSON.parse(response) as IDataObject
+    } catch {
+      throw new NodeOperationError(
+        node,
+        `Brixfit API returned a non-JSON response. Raw response (first 200 chars): ${response.slice(0, 200)}`,
+        { itemIndex },
+      )
+    }
   }
-  if (!['https:', 'http:'].includes(parsed.protocol)) {
-    throw new NodeOperationError(node, `Invalid Base URL: protocol must be http or https, got "${parsed.protocol}"`)
-  }
-  const h = parsed.hostname.toLowerCase()
-  // Exact hostname matches (not prefix — avoids false-positives on domains like 127th-regiment.example.com)
-  const blockedHosts = new Set(['localhost', '::1', '[::1]'])
-  // Full IPv4 octet-boundary checks
-  const isLoopback   = /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)
-  const isZeroNet    = /^0\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)
-  const isLinkLocal  = /^169\.254\.\d{1,3}\.\d{1,3}$/.test(h)
-  const is10Net      = /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)
-  const is192168     = /^192\.168\.\d{1,3}\.\d{1,3}$/.test(h)
-  const is172        = /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(h)
-  if (blockedHosts.has(h) || isLoopback || isZeroNet || isLinkLocal || is10Net || is192168 || is172) {
-    throw new NodeOperationError(node, `Invalid Base URL: private/internal network addresses are not allowed.`)
-  }
-  return url
-}
-
-// C3 FIX: Validate resource ID parameters before interpolating into URLs.
-// Blocks path traversal ("../webhooks"), query injection ("id?foo=bar"),
-// and empty-string bugs that hit the wrong endpoint.
-function validateId(raw: string, label: string, node: INode, itemIndex: number): string {
-  const id = String(raw ?? '').trim()
-  if (!id) {
-    throw new NodeOperationError(node, `${label} cannot be empty`, { itemIndex })
-  }
-  // Allow UUIDs, numeric IDs, slugs — block any path/query special chars
-  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(id)) {
-    throw new NodeOperationError(
-      node as never,
-      `${label} contains invalid characters. Expected a plain ID (letters, numbers, hyphens, underscores).`,
-      { itemIndex },
-    )
-  }
-  return id
+  return response as IDataObject
 }
 
 export class Brixfit implements INodeType {
@@ -72,11 +38,21 @@ export class Brixfit implements INodeType {
     group: ['output'],
     version: 1,
     subtitle: '={{$parameter["resource"] + ": " + $parameter["operation"]}}',
-    description: 'Manage leads, clients, and check-ins in Brixfit CRM',
+    description: 'Manage leads, clients, check-ins and webhooks in Brixfit Coaching CRM',
     defaults: { name: 'Brixfit' },
-    inputs: ['main'],
-    outputs: ['main'],
+    inputs: [NodeConnectionTypes.Main],
+    outputs: [NodeConnectionTypes.Main],
+    usableAsTool: true,
     credentials: [{ name: 'brixfitApi', required: true }],
+    codex: {
+      categories: ['CRM'],
+      subcategories: { CRM: ['Fitness & Coaching'] },
+      resources: {
+        primaryDocumentation: [{ url: 'https://brixfit.app/docs/n8n' }],
+        credentialDocumentation: [{ url: 'https://brixfit.app/coach/developer' }],
+      },
+      alias: ['brixfit', 'coaching', 'fitness', 'crm', 'leads', 'clients'],
+    },
     properties: [
 
       // ── Resource selector ──────────────────────────────────────────────────
@@ -102,12 +78,14 @@ export class Brixfit implements INodeType {
         noDataExpression: true,
         displayOptions: { show: { resource: ['lead'] } },
         options: [
-          { name: 'Create',        value: 'create',       description: 'Create a new lead',         action: 'Create a lead'       },
-          { name: 'Get',           value: 'get',          description: 'Get a lead by ID',          action: 'Get a lead'          },
-          { name: 'Get All',       value: 'getAll',       description: 'List all leads',            action: 'Get all leads'       },
-          { name: 'Update',        value: 'update',       description: 'Update a lead',             action: 'Update a lead'       },
-          { name: 'Update Status', value: 'updateStatus', description: "Change a lead's status",    action: 'Update lead status'  },
-          { name: 'Delete',        value: 'delete',       description: 'Delete a lead permanently', action: 'Delete a lead'       },
+          { name: 'Create',              value: 'create',             description: 'Create a new lead',                          action: 'Create a lead'            },
+          { name: 'Delete',              value: 'delete',             description: 'Delete a lead permanently',                  action: 'Delete a lead'            },
+          { name: 'Get',                 value: 'get',                description: 'Get a lead by ID',                           action: 'Get a lead'               },
+          { name: 'Get All',             value: 'getAll',             description: 'List all leads',                             action: 'Get all leads'            },
+          { name: 'Get Health Report',   value: 'getHealthReport',    description: 'Get the latest AI health report for a lead', action: 'Get lead health report'   },
+          { name: 'List Health Reports', value: 'listHealthReports',  description: 'List all AI health reports for a lead',      action: 'List lead health reports' },
+          { name: 'Update',              value: 'update',             description: 'Update a lead',                              action: 'Update a lead'            },
+          { name: 'Update Status',       value: 'updateStatus',       description: "Change a lead's pipeline status",            action: 'Update lead status'       },
         ],
         default: 'getAll',
       },
@@ -120,11 +98,13 @@ export class Brixfit implements INodeType {
         noDataExpression: true,
         displayOptions: { show: { resource: ['client'] } },
         options: [
-          { name: 'Get',             value: 'get',             description: 'Get a client by ID',          action: 'Get a client'           },
-          { name: 'Get All',         value: 'getAll',          description: 'List all clients',            action: 'Get all clients'         },
-          { name: 'Update',          value: 'update',          description: 'Update a client',             action: 'Update a client'         },
-          { name: 'Deactivate',      value: 'deactivate',      description: 'Deactivate a client account', action: 'Deactivate a client'     },
-          { name: 'Get Check-ins',   value: 'getCheckins',     description: 'Get all check-ins for a client', action: 'Get client check-ins' },
+          { name: 'Deactivate',          value: 'deactivate',         description: 'Deactivate a client account',                   action: 'Deactivate a client'        },
+          { name: 'Get',                 value: 'get',                description: 'Get a client by ID',                            action: 'Get a client'               },
+          { name: 'Get All',             value: 'getAll',             description: 'List all clients',                              action: 'Get all clients'            },
+          { name: 'Get Check-ins',       value: 'getCheckins',        description: 'Get all check-ins for a client',                action: 'Get client check-ins'       },
+          { name: 'Get Health Report',   value: 'getHealthReport',    description: 'Get the latest AI health report for a client',  action: 'Get client health report'   },
+          { name: 'List Health Reports', value: 'listHealthReports',  description: 'List all AI health reports for a client',       action: 'List client health reports' },
+          { name: 'Update',              value: 'update',             description: 'Update a client',                               action: 'Update a client'            },
         ],
         default: 'getAll',
       },
@@ -137,8 +117,8 @@ export class Brixfit implements INodeType {
         noDataExpression: true,
         displayOptions: { show: { resource: ['checkin'] } },
         options: [
-          { name: 'Get All',          value: 'getAll',       description: 'List all check-ins with optional filters', action: 'Get all check-ins'        },
-          { name: 'Get by Client',    value: 'getByClient',  description: 'Get all check-ins for a specific client',  action: 'Get check-ins by client'  },
+          { name: 'Get All',       value: 'getAll',      description: 'List all check-ins with optional filters', action: 'Get all check-ins'       },
+          { name: 'Get by Client', value: 'getByClient', description: 'Get all check-ins for a specific client',  action: 'Get check-ins by client' },
         ],
         default: 'getAll',
       },
@@ -151,10 +131,10 @@ export class Brixfit implements INodeType {
         noDataExpression: true,
         displayOptions: { show: { resource: ['webhook'] } },
         options: [
-          { name: 'Create',          value: 'create',         description: 'Register a new webhook',     action: 'Create a webhook'         },
-          { name: 'Get All',         value: 'getAll',         description: 'List all webhooks',           action: 'Get all webhooks'         },
-          { name: 'Enable / Disable', value: 'toggleActive',  description: 'Enable or disable a webhook', action: 'Enable or disable a webhook' },
-          { name: 'Delete',          value: 'delete',         description: 'Remove a webhook',            action: 'Delete a webhook'         },
+          { name: 'Create',          value: 'create',       description: 'Register a new webhook',      action: 'Create a webhook'          },
+          { name: 'Delete',          value: 'delete',       description: 'Remove a webhook',             action: 'Delete a webhook'          },
+          { name: 'Enable / Disable', value: 'toggleActive', description: 'Enable or disable a webhook', action: 'Enable or disable a webhook' },
+          { name: 'Get All',         value: 'getAll',       description: 'List all webhooks',            action: 'Get all webhooks'          },
         ],
         default: 'getAll',
       },
@@ -165,9 +145,19 @@ export class Brixfit implements INodeType {
         name: 'leadId',
         type: 'string',
         required: true,
-        displayOptions: { show: { resource: ['lead'], operation: ['get', 'update', 'updateStatus', 'delete'] } },
+        displayOptions: { show: { resource: ['lead'], operation: ['get', 'update', 'updateStatus', 'delete', 'getHealthReport', 'listHealthReports'] } },
         default: '',
         description: 'The unique ID of the lead',
+      },
+
+      // ── Return All (lead / client / checkin getAll) ────────────────────────
+      {
+        displayName: 'Return All',
+        name: 'returnAll',
+        type: 'boolean',
+        default: false,
+        displayOptions: { show: { resource: ['lead', 'client', 'checkin'], operation: ['getAll'] } },
+        description: 'Whether to return all results instead of only one page. Uses automatic pagination.',
       },
 
       // ── Lead create — dynamic fields via resourceMapper ────────────────────
@@ -219,15 +209,16 @@ export class Brixfit implements INodeType {
         description: 'Fields to update on this lead',
       },
 
-      // ── Lead update status ─────────────────────────────────────────────────
+      // ── Lead update status — dynamic dropdown ─────────────────────────────
       {
         displayName: 'Status',
         name: 'status',
-        type: 'string',
+        type: 'options',
+        typeOptions: { loadOptionsMethod: 'getLeadStatuses' },
         required: true,
         displayOptions: { show: { resource: ['lead'], operation: ['updateStatus'] } },
         default: '',
-        description: 'New status value — must match a status defined in your Brixfit pipeline',
+        description: 'New pipeline status — loaded from your Brixfit account. Click "Refresh" to update the list.',
       },
 
       // ── Client ID ──────────────────────────────────────────────────────────
@@ -239,7 +230,7 @@ export class Brixfit implements INodeType {
         displayOptions: {
           show: {
             resource: ['client'],
-            operation: ['get', 'update', 'deactivate', 'getCheckins'],
+            operation: ['get', 'update', 'deactivate', 'getCheckins', 'getHealthReport', 'listHealthReports'],
           },
         },
         default: '',
@@ -266,14 +257,14 @@ export class Brixfit implements INodeType {
             ],
             default: 'active',
           },
-          { displayName: 'Goal',     name: 'goal',     type: 'string', default: '' },
-          { displayName: 'Phone',    name: 'phone',    type: 'string', default: '' },
-          { displayName: 'End Date', name: 'end_date', type: 'string', default: '', description: 'Subscription end date (YYYY-MM-DD)' },
-          { displayName: 'Notes',    name: 'notes',    type: 'string', default: '', typeOptions: { rows: 3 } },
+          { displayName: 'End Date', name: 'end_date', type: 'dateTime', default: '', description: 'Subscription end date' },
+          { displayName: 'Goal',     name: 'goal',     type: 'string',   default: '' },
+          { displayName: 'Notes',    name: 'notes',    type: 'string',   default: '', typeOptions: { rows: 3 } },
+          { displayName: 'Phone',    name: 'phone',    type: 'string',   default: '' },
         ],
       },
 
-      // ── Check-in: Get by Client (dedicated) ───────────────────────────────
+      // ── Check-in: Get by Client ────────────────────────────────────────────
       {
         displayName: 'Client ID',
         name: 'checkinClientId',
@@ -296,7 +287,7 @@ export class Brixfit implements INodeType {
             name: 'status',
             type: 'options',
             options: [
-              { name: 'All',       value: '' },
+              { name: 'All',       value: ''          },
               { name: 'Completed', value: 'completed' },
               { name: 'Pending',   value: 'pending'   },
               { name: 'Reviewed',  value: 'reviewed'  },
@@ -310,7 +301,7 @@ export class Brixfit implements INodeType {
         ],
       },
 
-      // ── Client: Get Check-ins options (H3 FIX: separate param so filters are visible) ──
+      // ── Client: Get Check-ins options ──────────────────────────────────────
       {
         displayName: 'Options',
         name: 'clientCheckinOptions',
@@ -324,7 +315,7 @@ export class Brixfit implements INodeType {
             name: 'status',
             type: 'options',
             options: [
-              { name: 'All',       value: '' },
+              { name: 'All',       value: ''          },
               { name: 'Completed', value: 'completed' },
               { name: 'Pending',   value: 'pending'   },
               { name: 'Reviewed',  value: 'reviewed'  },
@@ -338,7 +329,26 @@ export class Brixfit implements INodeType {
         ],
       },
 
-      // ── List filters — lead / client only (M2 FIX: excluded from webhook getAll) ────
+      // ── Health reports list options ────────────────────────────────────────
+      {
+        displayName: 'Options',
+        name: 'healthReportListOptions',
+        type: 'collection',
+        placeholder: 'Add Option',
+        displayOptions: {
+          show: {
+            resource: ['lead', 'client'],
+            operation: ['listHealthReports'],
+          },
+        },
+        default: {},
+        options: [
+          { displayName: 'Page',     name: 'page',     type: 'number', default: 1,  description: 'Page number (starts at 1)'   },
+          { displayName: 'Per Page', name: 'per_page', type: 'number', default: 10, description: 'Results per page (max 50)'   },
+        ],
+      },
+
+      // ── List filters — lead / client ───────────────────────────────────────
       {
         displayName: 'Filters',
         name: 'filters',
@@ -355,25 +365,29 @@ export class Brixfit implements INodeType {
           { displayName: 'Search',   name: 'search',   type: 'string', default: '' },
           { displayName: 'Status',   name: 'status',   type: 'string', default: '' },
           { displayName: 'Page',     name: 'page',     type: 'number', default: 1  },
-          { displayName: 'Per Page', name: 'per_page', type: 'number', default: 20 },
-          // M3 FIX: sort exposed for leads
+          { displayName: 'Per Page', name: 'per_page', type: 'number', default: 20, description: 'Ignored when Return All is enabled' },
+          // Sort is only relevant for leads
           {
             displayName: 'Sort',
             name: 'sort',
             type: 'options',
             displayOptions: { show: { '/resource': ['lead'] } },
             options: [
-              { name: 'Created (Newest First)', value: 'created_desc' },
-              { name: 'Created (Oldest First)', value: 'created_asc'  },
-              { name: 'Name (A–Z)',             value: 'name_asc'     },
-              { name: 'Name (Z–A)',             value: 'name_desc'    },
+              { name: 'Created — Newest First', value: 'created_at:desc'  },
+              { name: 'Created — Oldest First', value: 'created_at:asc'   },
+              { name: 'Updated — Newest First', value: 'updated_at:desc'  },
+              { name: 'Updated — Oldest First', value: 'updated_at:asc'   },
+              { name: 'Name (A–Z)',              value: 'name:asc'         },
+              { name: 'Name (Z–A)',              value: 'name:desc'        },
+              { name: 'Email (A–Z)',             value: 'email:asc'        },
+              { name: 'Email (Z–A)',             value: 'email:desc'       },
             ],
-            default: 'created_desc',
+            default: 'created_at:desc',
           },
         ],
       },
 
-      // ── List filters — checkin getAll ─────────────────────────────────────
+      // ── List filters — checkin getAll ──────────────────────────────────────
       {
         displayName: 'Filters',
         name: 'filters',
@@ -388,11 +402,23 @@ export class Brixfit implements INodeType {
         default: {},
         options: [
           { displayName: 'Client ID', name: 'client_id', type: 'string', default: '' },
-          { displayName: 'Status',    name: 'status',    type: 'string', default: '' },
+          {
+            displayName: 'Status',
+            name: 'status',
+            type: 'options',
+            options: [
+              { name: 'All',       value: ''          },
+              { name: 'Completed', value: 'completed' },
+              { name: 'Overdue',   value: 'overdue'   },
+              { name: 'Pending',   value: 'pending'   },
+              { name: 'Reviewed',  value: 'reviewed'  },
+            ],
+            default: '',
+          },
           { displayName: 'From Date', name: 'from_date', type: 'string', default: '', description: 'YYYY-MM-DD' },
           { displayName: 'To Date',   name: 'to_date',   type: 'string', default: '', description: 'YYYY-MM-DD' },
           { displayName: 'Page',      name: 'page',      type: 'number', default: 1  },
-          { displayName: 'Per Page',  name: 'per_page',  type: 'number', default: 20 },
+          { displayName: 'Per Page',  name: 'per_page',  type: 'number', default: 20, description: 'Ignored when Return All is enabled' },
         ],
       },
 
@@ -435,14 +461,14 @@ export class Brixfit implements INodeType {
         required: true,
         displayOptions: { show: { resource: ['webhook'], operation: ['create'] } },
         options: [
-          { name: 'Lead Created',        value: 'lead.created'        },
-          { name: 'Lead Updated',        value: 'lead.updated'        },
-          { name: 'Lead Status Changed', value: 'lead.status_changed' },
-          { name: 'Lead Converted',      value: 'lead.converted'      },
-          { name: 'Lead Deleted',        value: 'lead.deleted'        },
+          { name: 'Check-in Submitted',  value: 'checkin.submitted'   },
           { name: 'Client Created',      value: 'client.created'      },
           { name: 'Client Updated',      value: 'client.updated'      },
-          { name: 'Check-in Submitted',  value: 'checkin.submitted'   },
+          { name: 'Lead Converted',      value: 'lead.converted'      },
+          { name: 'Lead Created',        value: 'lead.created'        },
+          { name: 'Lead Deleted',        value: 'lead.deleted'        },
+          { name: 'Lead Status Changed', value: 'lead.status_changed' },
+          { name: 'Lead Updated',        value: 'lead.updated'        },
         ],
         default: ['lead.created'],
       },
@@ -452,12 +478,35 @@ export class Brixfit implements INodeType {
         type: 'string',
         displayOptions: { show: { resource: ['webhook'], operation: ['create'] } },
         default: '',
+        description: 'Optional label for this webhook (max 255 chars)',
       },
     ],
   }
 
-  // ── Dynamic field loading ────────────────────────────────────────────────────
+  // ── Dynamic field and option loading ────────────────────────────────────────
   methods = {
+    loadOptions: {
+      // Fetch the coach's custom lead pipeline statuses for the Update Status dropdown
+      async getLeadStatuses(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+        const credentials = await this.getCredentials('brixfitApi')
+        const baseUrl = validateBaseUrl(credentials.baseUrl as string, this.getNode()) + '/api/public/v1'
+        try {
+          const response = await this.helpers.request({
+            method: 'GET',
+            url: `${baseUrl}/leads/statuses`,
+            headers: { 'X-API-Key': credentials.apiKey as string },
+            json: true,
+            timeout: REQUEST_TIMEOUT_MS,
+          }) as { data?: Array<{ value: string; sort_order?: number }> }
+          return (response.data ?? []).map(s => ({ name: s.value, value: s.value }))
+        } catch (err) {
+          throw new Error(
+            `Failed to load lead statuses: ${err instanceof Error ? err.message : String(err)}. ` +
+            'Check your API key and try refreshing.',
+          )
+        }
+      },
+    },
     resourceMapping: {
       async getLeadFields(this: ILoadOptionsFunctions): Promise<ResourceMapperFields> {
         return loadLeadFieldsFromApi(this, false)
@@ -473,7 +522,6 @@ export class Brixfit implements INodeType {
     const items      = this.getInputData()
     const returnData: INodeExecutionData[] = []
     const credentials = await this.getCredentials('brixfitApi')
-    // C4 FIX: validateBaseUrl blocks SSRF — rejects private IPs, non-http protocols
     const baseUrl     = validateBaseUrl(credentials.baseUrl as string, this.getNode()) + '/api/public/v1'
 
     for (let i = 0; i < items.length; i++) {
@@ -491,8 +539,29 @@ export class Brixfit implements INodeType {
         // ── LEAD ──────────────────────────────────────────────────────────────
         if (resource === 'lead') {
           if (operation === 'getAll') {
-            const filters = this.getNodeParameter('filters', i, {}) as IDataObject
-            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v !== null && v !== undefined)) as IDataObject
+            const returnAll = this.getNodeParameter('returnAll', i, false) as boolean
+            const filters   = this.getNodeParameter('filters', i, {}) as IDataObject
+            const qs        = Object.fromEntries(
+              Object.entries(filters).filter(([, v]) => v !== '' && v !== null && v !== undefined),
+            ) as IDataObject
+
+            if (returnAll) {
+              let page = 1
+              while (true) {
+                const r = await this.helpers.request({
+                  ...requestOptions,
+                  url: `${baseUrl}/leads`,
+                  qs: { ...qs, page, per_page: 100 },
+                })
+                const p = parseApiResponse(r, this.getNode(), i)
+                const rows = (p.data ?? p) as IDataObject[]
+                if (Array.isArray(rows)) rows.forEach(row => returnData.push({ json: row, pairedItem: { item: i } }))
+                const meta = p.meta as { total_pages?: number } | null
+                if (!meta || page >= (meta.total_pages ?? 1)) break
+                page++
+              }
+              continue
+            }
             requestOptions = { ...requestOptions, url: `${baseUrl}/leads`, qs }
 
           } else if (operation === 'get') {
@@ -500,21 +569,19 @@ export class Brixfit implements INodeType {
             requestOptions = { ...requestOptions, url: `${baseUrl}/leads/${id}` }
 
           } else if (operation === 'create') {
-            const name = this.getNodeParameter('name', i) as string
+            const name       = this.getNodeParameter('name', i) as string
             const mapperData = this.getNodeParameter('leadFields', i, { mappingMode: 'defineBelow', value: null }) as { value: Record<string, unknown> | null }
-            const dynamicFields = mapperData.value ?? {}
-            requestOptions = {
+            requestOptions   = {
               ...requestOptions,
               method: 'POST',
-              url: `${baseUrl}/leads`,
-              body: { name, ...dynamicFields } as IDataObject,
+              url:    `${baseUrl}/leads`,
+              body:   { name, ...(mapperData.value ?? {}) } as IDataObject,
             }
 
           } else if (operation === 'update') {
-            const id = validateId(this.getNodeParameter('leadId', i) as string, 'Lead ID', this.getNode(), i)
+            const id         = validateId(this.getNodeParameter('leadId', i) as string, 'Lead ID', this.getNode(), i)
             const mapperData = this.getNodeParameter('leadUpdateFields', i, { mappingMode: 'defineBelow', value: null }) as { value: Record<string, unknown> | null }
-            const body = (mapperData.value ?? {}) as IDataObject
-            requestOptions = { ...requestOptions, method: 'PATCH', url: `${baseUrl}/leads/${id}`, body }
+            requestOptions   = { ...requestOptions, method: 'PATCH', url: `${baseUrl}/leads/${id}`, body: (mapperData.value ?? {}) as IDataObject }
 
           } else if (operation === 'updateStatus') {
             const id     = validateId(this.getNodeParameter('leadId', i) as string, 'Lead ID', this.getNode(), i)
@@ -524,13 +591,46 @@ export class Brixfit implements INodeType {
           } else if (operation === 'delete') {
             const id = validateId(this.getNodeParameter('leadId', i) as string, 'Lead ID', this.getNode(), i)
             requestOptions = { ...requestOptions, method: 'DELETE', url: `${baseUrl}/leads/${id}` }
+
+          } else if (operation === 'getHealthReport') {
+            const id = validateId(this.getNodeParameter('leadId', i) as string, 'Lead ID', this.getNode(), i)
+            requestOptions = { ...requestOptions, url: `${baseUrl}/leads/${id}/health-report` }
+
+          } else if (operation === 'listHealthReports') {
+            const id   = validateId(this.getNodeParameter('leadId', i) as string, 'Lead ID', this.getNode(), i)
+            const opts = this.getNodeParameter('healthReportListOptions', i, {}) as IDataObject
+            const qs: IDataObject = {}
+            if (opts.page)     qs.page     = opts.page
+            if (opts.per_page) qs.per_page = opts.per_page
+            requestOptions = { ...requestOptions, url: `${baseUrl}/leads/${id}/health-reports`, qs }
           }
 
         // ── CLIENT ────────────────────────────────────────────────────────────
         } else if (resource === 'client') {
           if (operation === 'getAll') {
-            const filters = this.getNodeParameter('filters', i, {}) as IDataObject
-            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v !== null && v !== undefined)) as IDataObject
+            const returnAll = this.getNodeParameter('returnAll', i, false) as boolean
+            const filters   = this.getNodeParameter('filters', i, {}) as IDataObject
+            const qs        = Object.fromEntries(
+              Object.entries(filters).filter(([, v]) => v !== '' && v !== null && v !== undefined),
+            ) as IDataObject
+
+            if (returnAll) {
+              let page = 1
+              while (true) {
+                const r = await this.helpers.request({
+                  ...requestOptions,
+                  url: `${baseUrl}/clients`,
+                  qs: { ...qs, page, per_page: 100 },
+                })
+                const p = parseApiResponse(r, this.getNode(), i)
+                const rows = (p.data ?? p) as IDataObject[]
+                if (Array.isArray(rows)) rows.forEach(row => returnData.push({ json: row, pairedItem: { item: i } }))
+                const meta = p.meta as { total_pages?: number } | null
+                if (!meta || page >= (meta.total_pages ?? 1)) break
+                page++
+              }
+              continue
+            }
             requestOptions = { ...requestOptions, url: `${baseUrl}/clients`, qs }
 
           } else if (operation === 'get') {
@@ -538,8 +638,8 @@ export class Brixfit implements INodeType {
             requestOptions = { ...requestOptions, url: `${baseUrl}/clients/${id}` }
 
           } else if (operation === 'update') {
-            const id   = validateId(this.getNodeParameter('clientId', i) as string, 'Client ID', this.getNode(), i)
-            const body = this.getNodeParameter('clientUpdateFields', i, {}) as IDataObject
+            const id    = validateId(this.getNodeParameter('clientId', i) as string, 'Client ID', this.getNode(), i)
+            const body  = this.getNodeParameter('clientUpdateFields', i, {}) as IDataObject
             const clean = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== '' && v !== null)) as IDataObject
             requestOptions = { ...requestOptions, method: 'PATCH', url: `${baseUrl}/clients/${id}`, body: clean }
 
@@ -549,7 +649,7 @@ export class Brixfit implements INodeType {
 
           } else if (operation === 'getCheckins') {
             const clientId = validateId(this.getNodeParameter('clientId', i) as string, 'Client ID', this.getNode(), i)
-            const opts     = this.getNodeParameter('checkinClientOptions', i, {}) as IDataObject
+            const opts     = this.getNodeParameter('clientCheckinOptions', i, {}) as IDataObject
             const qs: IDataObject = { client_id: clientId }
             if (opts.status)    qs.status    = opts.status
             if (opts.from_date) qs.from_date = opts.from_date
@@ -557,13 +657,46 @@ export class Brixfit implements INodeType {
             if (opts.page)      qs.page      = opts.page
             if (opts.per_page)  qs.per_page  = opts.per_page
             requestOptions = { ...requestOptions, url: `${baseUrl}/checkins`, qs }
+
+          } else if (operation === 'getHealthReport') {
+            const id = validateId(this.getNodeParameter('clientId', i) as string, 'Client ID', this.getNode(), i)
+            requestOptions = { ...requestOptions, url: `${baseUrl}/clients/${id}/health-report` }
+
+          } else if (operation === 'listHealthReports') {
+            const id   = validateId(this.getNodeParameter('clientId', i) as string, 'Client ID', this.getNode(), i)
+            const opts = this.getNodeParameter('healthReportListOptions', i, {}) as IDataObject
+            const qs: IDataObject = {}
+            if (opts.page)     qs.page     = opts.page
+            if (opts.per_page) qs.per_page = opts.per_page
+            requestOptions = { ...requestOptions, url: `${baseUrl}/clients/${id}/health-reports`, qs }
           }
 
         // ── CHECKIN ───────────────────────────────────────────────────────────
         } else if (resource === 'checkin') {
           if (operation === 'getAll') {
-            const filters = this.getNodeParameter('filters', i, {}) as IDataObject
-            const qs = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v !== null && v !== undefined)) as IDataObject
+            const returnAll = this.getNodeParameter('returnAll', i, false) as boolean
+            const filters   = this.getNodeParameter('filters', i, {}) as IDataObject
+            const qs        = Object.fromEntries(
+              Object.entries(filters).filter(([, v]) => v !== '' && v !== null && v !== undefined),
+            ) as IDataObject
+
+            if (returnAll) {
+              let page = 1
+              while (true) {
+                const r = await this.helpers.request({
+                  ...requestOptions,
+                  url: `${baseUrl}/checkins`,
+                  qs: { ...qs, page, per_page: 100 },
+                })
+                const p = parseApiResponse(r, this.getNode(), i)
+                const rows = (p.data ?? p) as IDataObject[]
+                if (Array.isArray(rows)) rows.forEach(row => returnData.push({ json: row, pairedItem: { item: i } }))
+                const meta = p.meta as { total_pages?: number } | null
+                if (!meta || page >= (meta.total_pages ?? 1)) break
+                page++
+              }
+              continue
+            }
             requestOptions = { ...requestOptions, url: `${baseUrl}/checkins`, qs }
 
           } else if (operation === 'getByClient') {
@@ -584,14 +717,18 @@ export class Brixfit implements INodeType {
             requestOptions = { ...requestOptions, url: `${baseUrl}/webhooks` }
 
           } else if (operation === 'create') {
-            const url    = this.getNodeParameter('webhookUrl', i) as string
+            const webhookUrl = this.getNodeParameter('webhookUrl', i) as string
+            // Client-side HTTPS validation for clearer error messages
+            if (!webhookUrl.startsWith('https://')) {
+              throw new NodeOperationError(this.getNode(), 'Webhook URL must use HTTPS.', { itemIndex: i })
+            }
             const events = this.getNodeParameter('events', i) as string[]
             const desc   = this.getNodeParameter('webhookDescription', i, '') as string
             requestOptions = {
               ...requestOptions,
               method: 'POST',
-              url: `${baseUrl}/webhooks`,
-              body: { url, events, description: desc || undefined } as IDataObject,
+              url:    `${baseUrl}/webhooks`,
+              body:   { url: webhookUrl, events, description: desc || undefined } as IDataObject,
             }
 
           } else if (operation === 'toggleActive') {
@@ -606,21 +743,7 @@ export class Brixfit implements INodeType {
         }
 
         const response = await this.helpers.request(requestOptions)
-        // M4 FIX: wrap JSON.parse so a malformed API response gives a clear error instead of a cryptic SyntaxError
-        let parsed: IDataObject
-        if (typeof response === 'string') {
-          try {
-            parsed = JSON.parse(response) as IDataObject
-          } catch {
-            throw new NodeOperationError(
-              this.getNode(),
-              `Brixfit API returned a non-JSON response. This may indicate a server error or a proxy issue. Raw response (first 200 chars): ${response.slice(0, 200)}`,
-              { itemIndex: i },
-            )
-          }
-        } else {
-          parsed = response as IDataObject
-        }
+        const parsed   = parseApiResponse(response, this.getNode(), i)
         const result   = parsed.data ?? parsed
 
         if (Array.isArray(result)) {
@@ -648,7 +771,8 @@ async function loadLeadFieldsFromApi(
   includeNameField: boolean,
 ): Promise<ResourceMapperFields> {
   const credentials = await context.getCredentials('brixfitApi')
-  const baseUrl = `${credentials.baseUrl}/api/public/v1`
+  // FIX: validate baseUrl here too to prevent SSRF via loadOptions
+  const baseUrl = validateBaseUrl(credentials.baseUrl as string, context.getNode()) + '/api/public/v1'
 
   let rawFields: Array<{ field_key: string; label: string; field_type: string; is_required: boolean }> = []
   try {
@@ -657,14 +781,13 @@ async function loadLeadFieldsFromApi(
       url: `${baseUrl}/fields/leads`,
       headers: { 'X-API-Key': credentials.apiKey as string },
       json: true,
+      timeout: REQUEST_TIMEOUT_MS,
     }) as { data?: typeof rawFields }
     rawFields = response.data ?? []
   } catch (err) {
-    // H4 FIX: Surface the error so the user knows why the field list is empty.
-    // Previously this silently returned [] — masking bad credentials or network issues.
     throw new Error(
       `Failed to load lead fields from Brixfit API: ${err instanceof Error ? err.message : String(err)}. ` +
-      'Check that your API key is valid and that your Brixfit account has custom fields configured.'
+      'Check that your API key is valid and that your Brixfit account has custom fields configured.',
     )
   }
 
@@ -677,56 +800,21 @@ async function loadLeadFieldsFromApi(
 
   const fields: ResourceMapperField[] = []
 
-  // Always include standard fields first
-  if (!includeNameField) {
-    // name is a separate required param on create — skip it here
-  } else {
+  if (includeNameField) {
     fields.push({
-      id:               'name',
-      displayName:      'Name',
-      required:         false,
-      defaultMatch:     false,
-      display:          true,
-      type:             'string',
-      canBeUsedToMatch: false,
+      id: 'name', displayName: 'Name', required: false, defaultMatch: false,
+      display: true, type: 'string', canBeUsedToMatch: false,
     })
   }
 
   fields.push(
-    {
-      id:               'email',
-      displayName:      'Email',
-      required:         false,
-      defaultMatch:     false,
-      display:          true,
-      type:             'string',
-      canBeUsedToMatch: true,
-    },
-    {
-      id:               'phone',
-      displayName:      'Phone',
-      required:         false,
-      defaultMatch:     false,
-      display:          true,
-      type:             'string',
-      canBeUsedToMatch: false,
-    },
-    {
-      id:               'status',
-      displayName:      'Status',
-      required:         false,
-      defaultMatch:     false,
-      display:          true,
-      type:             'string',
-      canBeUsedToMatch: false,
-    },
+    { id: 'email',  displayName: 'Email',  required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true  },
+    { id: 'phone',  displayName: 'Phone',  required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
+    { id: 'status', displayName: 'Status', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
   )
 
-  // Append dynamic custom fields from the coach's Brixfit account
   for (const f of rawFields) {
-    // Skip if already in standard fields above
     if (['email', 'phone', 'status', 'name'].includes(f.field_key)) continue
-
     fields.push({
       id:               f.field_key,
       displayName:      f.label,
