@@ -6,7 +6,7 @@
 [![npm version](https://img.shields.io/npm/v/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
 [![npm downloads](https://img.shields.io/npm/dm/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
-[![Changelog](https://img.shields.io/badge/Changelog-v1.3.3-22c55e?style=for-the-badge)](CHANGELOG/v1.3.3-2026-05-31.md)
+[![Changelog](https://img.shields.io/badge/Changelog-v1.3.4-22c55e?style=for-the-badge)](CHANGELOG/v1.3.4-2026-06-01.md)
 
 **Official n8n community node for [Brixfit](https://brixfit.app) — the AI-powered Coaching CRM for fitness coaches.**
 
@@ -247,7 +247,7 @@ This node follows security best practices out of the box:
 - [Developer dashboard](https://brixfit.app/coach/developer) *(login required — API keys & webhooks)*
 - [npm package](https://www.npmjs.com/package/n8n-nodes-brixfit)
 - [GitHub repository](https://github.com/jatinbenivval/n8n-nodes-brixfit)
-- [Changelog](CHANGELOG/v1.3.3-2026-05-31.md)
+- [Changelog](CHANGELOG/v1.3.4-2026-06-01.md)
 - [Report a bug](https://github.com/jatinbenivval/n8n-nodes-brixfit/issues)
 - [Contact support](mailto:support@brixfit.app)
 
@@ -259,6 +259,7 @@ See the [CHANGELOG](CHANGELOG/) folder for full version history.
 
 | Version | Date | Summary |
 |---------|------|---------|
+| [v1.3.4](CHANGELOG/v1.3.4-2026-06-01.md) | 2026-06-01 | Fix package bloat: icon resized 1250px→60px (−99.5%), removed duplicate inclusion |
 | [v1.3.3](CHANGELOG/v1.3.3-2026-05-31.md) | 2026-05-31 | New icon (PNG), updated API docs URL, support email added |
 | [v1.3.1](CHANGELOG/v1.3.1-2026-05-31.md) | 2026-05-31 | Trigger: flat output, replay protection, events auto-sync, options panel, client.deleted event |
 | [v1.3.0](CHANGELOG/v1.3.0-2026-05-31.md) | 2026-05-31 | Auto-registration, health reports, plan-gated metrics, Return All, dynamic statuses, 16 bug fixes |
