@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-brixfit",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "description": "n8n community node for Brixfit Coaching CRM — manage leads, clients, check-ins and webhooks",
   "author": {
     "name": "Jatin Beniwal",
@@ -8,7 +8,7 @@
     "url": "https://brixfit.app"
   },
   "license": "MIT",
-  "homepage": "https://brixfit.app/docs/n8n",
+  "homepage": "https://brixfit.app",
   "repository": {
     "type": "git",
     "url": "https://github.com/jatinbenivval/n8n-nodes-brixfit"
@@ -29,8 +29,7 @@
     "prepublishOnly": "npm run build"
   },
   "files": [
-    "dist",
-    "nodes/Brixfit/icon.png"
+    "dist"
   ],
   "n8n": {
     "n8nNodesApiVersion": 1,
