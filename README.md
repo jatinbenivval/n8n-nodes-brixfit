@@ -6,7 +6,7 @@
 [![npm version](https://img.shields.io/npm/v/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
 [![npm downloads](https://img.shields.io/npm/dm/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
-[![Changelog](https://img.shields.io/badge/Changelog-v1.3.4-22c55e?style=for-the-badge)](CHANGELOG/v1.3.4-2026-06-01.md)
+[![Changelog](https://img.shields.io/badge/Changelog-v1.4.0-22c55e?style=for-the-badge)](CHANGELOG/v1.4.0-2026-10-04.md)
 
 **Official n8n community node for [Brixfit](https://brixfit.app) — the AI-powered Coaching CRM for fitness coaches.**
 
@@ -28,7 +28,7 @@ This node lets you connect Brixfit to any tool in your n8n workflow.
 
 | Node | Type | Description |
 |------|------|-------------|
-| **Brixfit** | Action | Perform operations on leads, clients, check-ins and webhooks |
+| **Brixfit** | Action | Perform operations on leads, clients, check-ins, forms and webhooks |
 | **Brixfit Trigger** | Trigger | Start workflows automatically when events fire in Brixfit |
 
 ---
@@ -75,7 +75,16 @@ In n8n, go to **Credentials → New** and search for **Brixfit API**.
 | **API Key** | Your key from Brixfit → Developer → API Keys |
 | **Base URL** | `https://brixfit.app` (leave as default) |
 
-Click **Save** — n8n automatically tests the connection with a live API call and confirms your key is valid before saving.
+Click **Save** — n8n verifies the key against your Brixfit account and tells you immediately if it is wrong. That is the whole setup: no webhook secrets, no IDs to copy.
+
+### Troubleshooting
+
+| Message | What to do |
+|---------|-----------|
+| API key not accepted | Create a new key in Brixfit → Developer → API Keys and update the credential |
+| `"x" is required` | Your lead form asks for that question. The message lists every missing field — pass a value, or make the question optional in Forms → Lead form |
+| Field list looks out of date | Click **Refresh** next to the fields after editing your form |
+| Connection test can't be completed | Make sure Base URL is `https://brixfit.app` and that you are on the latest Brixfit and node version |
 
 ### 2. Add the Brixfit node to a workflow
 
@@ -100,7 +109,7 @@ That's it — no manual copy-paste. When you deactivate the workflow, the webhoo
 
 | Operation | Description |
 |-----------|-------------|
-| **Get All** | List leads with optional search, status filter, sort, and pagination. Enable **Return All** to auto-fetch every page. |
+| **Get Many** | List leads with optional search, status filter, sort, and pagination. Enable **Return All** to auto-fetch every page. |
 | **Get** | Fetch a single lead by ID |
 | **Create** | Create a new lead — fields are dynamically loaded from your Brixfit account. Response includes plan-gated computed metrics (BMI, BMR, TDEE, body fat %). |
 | **Update** | Update lead fields — same dynamic field loading |
@@ -109,7 +118,7 @@ That's it — no manual copy-paste. When you deactivate the workflow, the webhoo
 | **List Health Reports** | Paginated list of all AI health reports for a lead |
 | **Delete** | Permanently delete a lead |
 
-> **Dynamic fields**: When you create or update a lead, the node automatically fetches your custom field definitions from Brixfit and shows them as individual inputs. Click **Refresh** to reload after adding new fields.
+> **Dynamic fields**: Create and Update load the questions from your *live* Brixfit lead form — labels, dropdown choices, and required markers (`*`). Click **Refresh** after editing the form. Required rules follow your form, so you are only asked for what a visitor would be asked for, and any error lists the exact missing fields.
 >
 > **Plan-gated metrics**: Health metrics (BMI, BMR, TDEE, body fat %) in Create and health report responses are filtered to only include what your Brixfit plan allows.
 
@@ -117,27 +126,37 @@ That's it — no manual copy-paste. When you deactivate the workflow, the webhoo
 
 | Operation | Description |
 |-----------|-------------|
-| **Get All** | List clients with search and status filter. Enable **Return All** to auto-fetch every page. |
+| **Get Many** | List clients with search and status filter. Enable **Return All** to auto-fetch every page. |
 | **Get** | Fetch a single client by ID |
 | **Update** | Update account status, goal, phone, end date or notes |
+| **Get Onboarding** | Onboarding status for a client: missing profile fields, whether your onboarding form is pending, and past submissions |
 | **Deactivate** | Deactivate a client account |
 | **Get Check-ins** | Fetch all check-ins for a specific client, with status and date filters |
 | **Get Health Report** | Fetch the most recent AI health report for a client, including plan-gated metrics and PDF download URL |
 | **List Health Reports** | Paginated list of all AI health reports for a client |
 
+### Form
+
+| Operation | Description |
+|-----------|-------------|
+| **Get Many** | List your lead and onboarding forms (slug, public URL, enabled state, question count) |
+| **Get** | Full definition of the lead or onboarding form: every question with its key, input type, choices, required flag, condition and mapped system field |
+
 ### Check-in
 
 | Operation | Description |
 |-----------|-------------|
-| **Get All** | List check-ins with filters (status, date range, client ID, pagination). Enable **Return All** to auto-fetch every page. |
+| **Get Many** | List check-ins with filters (status, date range, client ID, pagination). Enable **Return All** to auto-fetch every page. |
 | **Get by Client** | Fetch all check-ins for a specific client ID |
 
 ### Webhook
 
+Most workflows don't need this resource — the **Brixfit Trigger** registers and removes its own webhook. Use it to manage webhooks from a workflow.
+
 | Operation | Description |
 |-----------|-------------|
-| **Get All** | List all registered webhooks |
-| **Create** | Register a new webhook endpoint |
+| **Get Many** | List all registered webhooks |
+| **Create** | Register a new webhook endpoint (all 10 events supported) |
 | **Enable / Disable** | Toggle a webhook's `is_active` state without deleting it |
 | **Delete** | Remove a webhook |
 
@@ -154,6 +173,7 @@ The **Brixfit Trigger** node starts your workflow when any of these events fire:
 | `lead.status_changed` | A lead moves to a new pipeline stage |
 | `lead.converted` | A lead is converted to a client |
 | `lead.deleted` | A lead is deleted |
+| `lead.call_booked` | A lead books a call through your lead form's after-submit scheduler (Cal.com / Calendly) |
 | `client.created` | A new client is onboarded |
 | `client.updated` | A client's details are updated |
 | `client.deleted` | A client account is deleted |
@@ -195,7 +215,7 @@ Brixfit Trigger (checkin.submitted)
 
 ```
 Schedule Trigger (every day at 9am)
-  → Brixfit: Get All Check-ins (from_date: today, status: pending)
+  → Brixfit: Get Many Check-ins (from_date: today, status: pending)
   → Gmail: Send summary to coach
 ```
 
@@ -259,6 +279,7 @@ See the [CHANGELOG](CHANGELOG/) folder for full version history.
 
 | Version | Date | Summary |
 |---------|------|---------|
+| [v1.4.0](CHANGELOG/v1.4.0-2026-10-04.md) | 2026-10-04 | Easier setup, smarter lead fields, Form and Onboarding operations, new events, refreshed icon |
 | [v1.3.4](CHANGELOG/v1.3.4-2026-06-01.md) | 2026-06-01 | Fix package bloat: icon resized 1250px→60px (−99.5%), removed duplicate inclusion |
 | [v1.3.3](CHANGELOG/v1.3.3-2026-05-31.md) | 2026-05-31 | New icon (PNG), updated API docs URL, support email added |
 | [v1.3.1](CHANGELOG/v1.3.1-2026-05-31.md) | 2026-05-31 | Trigger: flat output, replay protection, events auto-sync, options panel, client.deleted event |

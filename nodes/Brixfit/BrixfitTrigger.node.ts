@@ -8,7 +8,8 @@ import type {
   IDataObject,
 } from 'n8n-workflow'
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow'
-import { validateBaseUrl, REQUEST_TIMEOUT_MS } from './Brixfit.utils'
+import { brixfitRequest } from './Brixfit.utils'
+import { WEBHOOK_EVENT_OPTIONS } from './events'
 
 // Sorted fingerprint of an events array — used to detect when the user changes
 // the event selection so we can force a webhook re-registration.
@@ -60,17 +61,7 @@ export class BrixfitTrigger implements INodeType {
         displayName: 'Events to Listen For',
         name: 'events',
         type: 'multiOptions',
-        options: [
-          { name: 'Lead Created',        value: 'lead.created'        },
-          { name: 'Lead Updated',        value: 'lead.updated'        },
-          { name: 'Lead Status Changed', value: 'lead.status_changed' },
-          { name: 'Lead Converted',      value: 'lead.converted'      },
-          { name: 'Lead Deleted',        value: 'lead.deleted'        },
-          { name: 'Client Created',      value: 'client.created'      },
-          { name: 'Client Updated',      value: 'client.updated'      },
-          { name: 'Client Deleted',      value: 'client.deleted'      },
-          { name: 'Check-in Submitted',  value: 'checkin.submitted'   },
-        ],
+        options: WEBHOOK_EVENT_OPTIONS,
         default: ['lead.created'],
         description: 'Which Brixfit events trigger this workflow. If you change this list, deactivate and reactivate the workflow to sync the registration.',
       },
@@ -134,19 +125,9 @@ export class BrixfitTrigger implements INodeType {
         const currentFingerprint = eventsFingerprint(this.getNodeParameter('events') as string[])
         if (staticData.webhookEvents !== currentFingerprint) return false
 
-        const credentials = await this.getCredentials('brixfitApi')
-        const baseUrl     = validateBaseUrl(credentials.baseUrl as string, this.getNode()) + '/api/public/v1'
-        const apiKey      = credentials.apiKey as string
-
         try {
-          const response = await this.helpers.request({
-            method: 'GET',
-            url: `${baseUrl}/webhooks`,
-            headers: { 'x-api-key': apiKey },
-            json: true,
-            timeout: REQUEST_TIMEOUT_MS,
-          })
-          const webhooks = (response?.data ?? []) as Array<{ id: string; is_active: boolean }>
+          const response = await brixfitRequest(this, 'GET', '/webhooks')
+          const webhooks = (response.data ?? []) as Array<{ id: string; is_active: boolean }>
           return webhooks.some(w => w.id === webhookId && w.is_active)
         } catch {
           return false
@@ -161,20 +142,9 @@ export class BrixfitTrigger implements INodeType {
         }
         const description = options.webhookDescription?.trim() || 'Created automatically by n8n'
 
-        const credentials = await this.getCredentials('brixfitApi')
-        const baseUrl     = validateBaseUrl(credentials.baseUrl as string, this.getNode()) + '/api/public/v1'
-        const apiKey      = credentials.apiKey as string
+        const response = await brixfitRequest(this, 'POST', '/webhooks', { body: { url: webhookUrl, events, description } })
 
-        const response = await this.helpers.request({
-          method: 'POST',
-          url: `${baseUrl}/webhooks`,
-          headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
-          body: { url: webhookUrl, events, description },
-          json: true,
-          timeout: REQUEST_TIMEOUT_MS,
-        })
-
-        const data = response?.data as { id?: string; secret?: string } | null
+        const data = response.data as { id?: string; secret?: string } | null
         if (!data?.id) return false
 
         const staticData         = this.getWorkflowStaticData('node')
@@ -189,18 +159,8 @@ export class BrixfitTrigger implements INodeType {
         const webhookId  = staticData.webhookId as string | undefined
         if (!webhookId) return true
 
-        const credentials = await this.getCredentials('brixfitApi')
-        const baseUrl     = validateBaseUrl(credentials.baseUrl as string, this.getNode()) + '/api/public/v1'
-        const apiKey      = credentials.apiKey as string
-
         try {
-          await this.helpers.request({
-            method: 'DELETE',
-            url: `${baseUrl}/webhooks/${webhookId}`,
-            headers: { 'x-api-key': apiKey },
-            json: true,
-            timeout: REQUEST_TIMEOUT_MS,
-          })
+          await brixfitRequest(this, 'DELETE', `/webhooks/${webhookId}`)
         } catch {
           // Ignore — webhook may have already been deleted from the Brixfit dashboard
         }

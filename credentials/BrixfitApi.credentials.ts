@@ -1,4 +1,9 @@
-import type { ICredentialType, ICredentialTestRequest, INodeProperties } from 'n8n-workflow'
+import type {
+  IAuthenticateGeneric,
+  ICredentialTestRequest,
+  ICredentialType,
+  INodeProperties,
+} from 'n8n-workflow'
 
 export class BrixfitApi implements ICredentialType {
   name = 'brixfitApi'
@@ -8,34 +13,43 @@ export class BrixfitApi implements ICredentialType {
 
   properties: INodeProperties[] = [
     {
+      displayName: 'Create a key in <a href="https://brixfit.app/coach/developer" target="_blank">Brixfit → Developer → API Keys</a>, paste it below, then click <b>Save</b>. n8n tests the connection automatically — no other setup needed.',
+      name: 'setupNotice',
+      type: 'notice',
+      default: '',
+    },
+    {
       displayName: 'API Key',
       name: 'apiKey',
       type: 'string',
       typeOptions: { password: true },
       default: '',
       required: true,
-      placeholder: 'brx_xxxxxxxxxxxxxxxx',
-      description: 'Your Brixfit API key. Generate one in Brixfit → Developer → API Keys.',
+      placeholder: 'brx_…',
+      description: 'Starts with brx_. Shown only once when you create it in Brixfit.',
     },
     {
       displayName: 'Base URL',
       name: 'baseUrl',
       type: 'string',
       default: 'https://brixfit.app',
-      description: 'Leave as-is unless you are using a self-hosted Brixfit instance.',
+      description: 'Leave as-is unless you use a self-hosted Brixfit instance.',
     },
   ]
 
-  // Fires a real HTTP call when the user clicks "Save" / "Test connection" in n8n.
-  // HTTP 200 = credential valid. HTTP 401/403 = bad API key (n8n surfaces the error automatically).
+  // n8n adds the key to every request made with `requestWithAuthentication`.
+  authenticate: IAuthenticateGeneric = {
+    type: 'generic',
+    properties: {
+      headers: { 'X-API-Key': '={{$credentials.apiKey}}' },
+    },
+  }
+
+  // Runs on Save: 200 = connected, 401 = bad key (n8n shows the error).
   test: ICredentialTestRequest = {
     request: {
       baseURL: '={{$credentials.baseUrl}}',
-      url: '/api/public/v1/leads',
-      headers: {
-        'X-API-Key': '={{$credentials.apiKey}}',
-      },
-      qs: { per_page: 1 },
+      url: '/api/public/v1/me',
     },
   }
 }
