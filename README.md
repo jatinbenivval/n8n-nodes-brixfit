@@ -7,7 +7,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/n8n-nodes-brixfit?style=for-the-badge&color=2563eb)](https://www.npmjs.com/package/n8n-nodes-brixfit)
 [![n8n community node](https://img.shields.io/badge/n8n-community%20node-ea4b71?style=for-the-badge)](https://docs.n8n.io/integrations/community-nodes/installation/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
-[![Changelog](https://img.shields.io/badge/Changelog-v1.4.0-22c55e?style=for-the-badge)](CHANGELOG/v1.4.0-2026-10-04.md)
+[![Changelog](https://img.shields.io/badge/Changelog-v1.4.1-22c55e?style=for-the-badge)](CHANGELOG/v1.4.1-2026-10-05.md)
 
 [![Website](https://img.shields.io/badge/%F0%9F%8C%90_Website-brixfit.app-2563eb?style=for-the-badge)](https://brixfit.app)
 [![Get API key](https://img.shields.io/badge/%F0%9F%94%91_Get_API_key-Developer-16a34a?style=for-the-badge)](https://brixfit.app/coach/developer)
@@ -83,11 +83,21 @@ In n8n, go to **Credentials → New** and search for **Brixfit API**.
 
 Click **Save** — n8n verifies the key against your Brixfit account and tells you immediately if it is wrong. That is the whole setup: no webhook secrets, no IDs to copy.
 
+When you create the key in Brixfit, pick the permissions it needs:
+
+| Preset | Use it for |
+|--------|-----------|
+| **Read-only** | Workflows that only read leads, clients, check-ins, forms or reports |
+| **Lead capture** | Workflows that only create or update leads (website forms, ads) |
+| **Full access** | Everything, including the **Brixfit Trigger**, which registers its own webhook |
+
 ### Troubleshooting
 
 | Message | What to do |
 |---------|-----------|
-| API key not accepted | Create a new key in Brixfit → Developer → API Keys and update the credential |
+| API key not accepted, expired or retired | Create a new key in Brixfit → Developer → API Keys and update the credential |
+| The API key is not allowed to do this | The message names the missing permission. Create a key that includes it |
+| Rate limit reached | The node already waited and retried. Slow the workflow down (Loop Over Items with a Wait) |
 | `"x" is required` | Your lead form asks for that question. The message lists every missing field — pass a value, or make the question optional in Forms → Lead form |
 | Field list looks out of date | Click **Refresh** next to the fields after editing your form |
 | Connection test can't be completed | Make sure Base URL is `https://brixfit.app` and that you are on the latest Brixfit and node version |
@@ -263,6 +273,9 @@ This node follows security best practices out of the box:
 - **Path traversal prevention** — all ID parameters are validated against an allowlist before use in URLs
 - **30-second request timeout** — prevents n8n executions from hanging on slow API responses
 - **Live credential testing** — API key is verified immediately on Save
+- **Least-privilege keys** — works with keys limited to the permissions a workflow needs
+- **Replay-safe webhooks** — verifies Brixfit's timestamped signature when present
+- **Idempotent creates** — a retried Lead → Create never makes a duplicate
 
 ---
 
@@ -273,7 +286,7 @@ This node follows security best practices out of the box:
 - [Developer dashboard](https://brixfit.app/coach/developer) *(login required — API keys & webhooks)*
 - [npm package](https://www.npmjs.com/package/n8n-nodes-brixfit)
 - [GitHub repository](https://github.com/jatinbenivval/n8n-nodes-brixfit)
-- [Changelog](CHANGELOG/v1.4.0-2026-10-04.md)
+- [Changelog](CHANGELOG/v1.4.1-2026-10-05.md)
 - [Report a bug](https://github.com/jatinbenivval/n8n-nodes-brixfit/issues)
 - [Contact support](mailto:support@brixfit.app)
 
@@ -285,6 +298,7 @@ See the [CHANGELOG](CHANGELOG/) folder for full version history.
 
 | Version | Date | Summary |
 |---------|------|---------|
+| [v1.4.1](CHANGELOG/v1.4.1-2026-10-05.md) | 2026-10-05 | API key permissions, no duplicate leads on retry, automatic wait on rate limits, timestamped trigger signature, clearer errors |
 | [v1.4.0](CHANGELOG/v1.4.0-2026-10-04.md) | 2026-10-04 | Easier setup, smarter lead fields, Form and Onboarding operations, new events, refreshed icon |
 | [v1.3.4](CHANGELOG/v1.3.4-2026-06-01.md) | 2026-06-01 | Fix package bloat: icon resized 1250px→60px (−99.5%), removed duplicate inclusion |
 | [v1.3.3](CHANGELOG/v1.3.3-2026-05-31.md) | 2026-05-31 | New icon (PNG), updated API docs URL, support email added |

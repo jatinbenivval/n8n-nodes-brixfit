@@ -13,7 +13,7 @@ export class BrixfitApi implements ICredentialType {
 
   properties: INodeProperties[] = [
     {
-      displayName: 'Create a key in <a href="https://brixfit.app/coach/developer" target="_blank">Brixfit → Developer → API Keys</a>, paste it below, then click <b>Save</b>. n8n tests the connection automatically — no other setup needed.',
+      displayName: 'Create a key in <a href="https://brixfit.app/coach/developer" target="_blank">Brixfit → Developer → API Keys</a>, paste it below, then click <b>Save</b>. n8n tests the connection automatically. Give the key only the permissions your workflows need: <b>Read-only</b> to read data, <b>Lead capture</b> to create leads, <b>Full access</b> for everything including the Brixfit Trigger.',
       name: 'setupNotice',
       type: 'notice',
       default: '',
@@ -46,11 +46,12 @@ export class BrixfitApi implements ICredentialType {
   }
 
   // Runs on Save: 200 = connected, 401 = bad key (n8n shows the error).
+  // `/me` accepts any valid key whatever its permissions, so a Lead capture or
+  // Read-only key passes the test too.
   test: ICredentialTestRequest = {
     request: {
       baseURL: '={{$credentials.baseUrl}}',
-      url: '/api/public/v1/leads',
-      qs: { per_page: 1 },
+      url: '/api/public/v1/me',
     },
   }
 }

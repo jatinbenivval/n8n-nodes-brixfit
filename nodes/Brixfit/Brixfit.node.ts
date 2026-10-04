@@ -15,6 +15,7 @@ import {
   brixfitGetAll,
   brixfitRequest,
   compact,
+  idempotencyKeyFor,
   toNodeError,
   validateId,
 } from './Brixfit.utils'
@@ -79,11 +80,13 @@ export class Brixfit implements INodeType {
         const id = (name: string, label: string) =>
           validateId(param(name) as string, label, this.getNode(), i)
 
-        const result = await run(this, resource, operation, param, id)
+        const result = await run(this, resource, operation, param, id, i)
         for (const row of result) push(row)
       } catch (err) {
         if (this.continueOnFail()) {
-          push({ error: err instanceof Error ? err.message : String(err) })
+          // Same readable message and fix hint the node would throw, so an error branch can act on it.
+          const nodeError = toNodeError(err, this.getNode(), i)
+          push(compact({ error: nodeError.message, hint: nodeError.description ?? '' }))
         } else {
           throw toNodeError(err, this.getNode(), i)
         }
@@ -103,8 +106,9 @@ async function run(
   operation: string,
   param: Param,
   id: (name: string, label: string) => string,
+  itemIndex: number,
 ): Promise<IDataObject[]> {
-  const one = async (method: IHttpRequestMethods, path: string, options: { qs?: IDataObject; body?: IDataObject } = {}) => {
+  const one = async (method: IHttpRequestMethods, path: string, options: { qs?: IDataObject; body?: IDataObject; idempotencyKey?: string } = {}) => {
     const res = await brixfitRequest(ctx, method, path, options)
     const data = res.data ?? res
     return Array.isArray(data) ? (data as IDataObject[]) : [data as IDataObject]
@@ -127,7 +131,8 @@ async function run(
     case 'lead.get':              return one('GET', `/leads/${id('leadId', 'Lead ID')}`)
     case 'lead.create': {
       const mapped = param('leadFields', { value: null }) as { value: IDataObject | null }
-      return one('POST', '/leads', { body: { name: param('name') as string, ...(mapped.value ?? {}) } })
+      const body = { name: param('name') as string, ...(mapped.value ?? {}) }
+      return one('POST', '/leads', { body, idempotencyKey: idempotencyKeyFor(ctx, `lead.create:${itemIndex}`, body) })
     }
     case 'lead.update': {
       const mapped = param('leadUpdateFields', { value: null }) as { value: IDataObject | null }
@@ -162,7 +167,8 @@ async function run(
       const url = param('webhookUrl') as string
       if (!url.startsWith('https://')) throw new NodeOperationError(ctx.getNode(), 'Webhook URL must use HTTPS.')
       const description = param('webhookDescription', '') as string
-      return one('POST', '/webhooks', { body: { url, events: param('events') as string[], description: description || undefined } })
+      const body = { url, events: param('events') as string[], description: description || undefined }
+      return one('POST', '/webhooks', { body, idempotencyKey: idempotencyKeyFor(ctx, `webhook.create:${itemIndex}`, body) })
     }
     case 'webhook.toggleActive':  return one('PATCH', `/webhooks/${id('webhookId', 'Webhook ID')}`, { body: { is_active: param('webhookIsActive') as boolean } })
     case 'webhook.delete':        return one('DELETE', `/webhooks/${id('webhookId', 'Webhook ID')}`)

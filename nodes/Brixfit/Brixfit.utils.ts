@@ -6,11 +6,17 @@ import type {
   INode,
   IHttpRequestMethods,
 } from 'n8n-workflow'
-import { NodeOperationError } from 'n8n-workflow'
+import { NodeOperationError, sleep } from 'n8n-workflow'
+import { createHash } from 'crypto'
 
 export const REQUEST_TIMEOUT_MS = 30_000
 export const API_PATH = '/api/public/v1'
 const MAX_PAGES = 1000
+
+// When Brixfit answers 429, wait for the time it asks and try again, up to this
+// many times. Longer waits are left to the workflow's own retry settings.
+const MAX_RATE_LIMIT_RETRIES = 2
+const MAX_RATE_LIMIT_WAIT_SECONDS = 30
 
 type Ctx = IExecuteFunctions | ILoadOptionsFunctions | IHookFunctions
 
@@ -66,11 +72,14 @@ export function compact(obj: IDataObject): IDataObject {
 
 interface ApiErrorBody {
   error?: string
+  code?: string
   details?: unknown
   missing_fields?: string[]
+  required_scopes?: string[]
+  retry_after_seconds?: number
 }
 
-// Pull the Brixfit `{ error, details, missing_fields }` body out of whatever the HTTP layer threw.
+// Pull the Brixfit `{ error, code, details, … }` body out of whatever the HTTP layer threw.
 function readApiError(err: unknown): { status?: number; body: ApiErrorBody; raw: string } {
   const e = err as {
     httpCode?: string | number
@@ -103,9 +112,24 @@ export function toNodeError(err: unknown, node: INode, itemIndex?: number): Node
   let message = body.error ? `Brixfit: ${body.error}` : `Brixfit request failed: ${raw}`
   if (lines.length) message += ` ${lines.join(' ')}`
 
+  const newKeyHint = 'Create a new key in Brixfit → Developer → API Keys and update the Brixfit API credential.'
+
   let description: string | undefined
-  if (status === 401) {
-    description = 'The API key was rejected. Create a new key in Brixfit → Developer → API Keys and update the Brixfit API credential.'
+  if (body.code === 'key_expired') {
+    description = `This API key has reached its expiry date. ${newKeyHint}`
+  } else if (body.code === 'key_retired') {
+    description = `This is an older key without permissions, and Brixfit has retired those. ${newKeyHint}`
+  } else if (status === 401) {
+    description = `The API key was rejected. ${newKeyHint}`
+  } else if (body.code === 'insufficient_scope') {
+    const needed = body.required_scopes?.length ? ` It needs: ${body.required_scopes.join(' or ')}.` : ''
+    description = `The API key is not allowed to do this.${needed} Create a key with that permission in Brixfit → Developer → API Keys.`
+  } else if (body.code === 'plan_required') {
+    description = 'API access is not part of the current Brixfit plan. Upgrade the plan in Brixfit to use this node.'
+  } else if (body.code === 'account_inactive') {
+    description = 'The Brixfit account behind this key is suspended. Contact Brixfit support.'
+  } else if (body.code === 'idempotency_in_progress') {
+    description = 'The same request is still being processed by Brixfit. Retry in a few seconds.'
   } else if (status === 404) {
     description = 'Nothing was found for that ID (or it belongs to a different Brixfit account).'
   } else if (status === 422 && body.missing_fields?.length) {
@@ -121,18 +145,33 @@ export async function brixfitRequest(
   ctx: Ctx,
   method: IHttpRequestMethods,
   path: string,
-  options: { qs?: IDataObject; body?: IDataObject } = {},
+  options: { qs?: IDataObject; body?: IDataObject; idempotencyKey?: string } = {},
 ): Promise<IDataObject> {
   const credentials = await ctx.getCredentials('brixfitApi')
   const baseUrl = validateBaseUrl(credentials.baseUrl as string, ctx.getNode())
-  const response = await ctx.helpers.requestWithAuthentication.call(ctx, 'brixfitApi', {
-    method,
-    url: `${baseUrl}${API_PATH}${path}`,
-    qs: options.qs,
-    body: options.body,
-    json: true,
-    timeout: REQUEST_TIMEOUT_MS,
-  })
+  const send = () =>
+    ctx.helpers.requestWithAuthentication.call(ctx, 'brixfitApi', {
+      method,
+      url: `${baseUrl}${API_PATH}${path}`,
+      qs: options.qs,
+      body: options.body,
+      headers: options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : undefined,
+      json: true,
+      timeout: REQUEST_TIMEOUT_MS,
+    })
+
+  let response: unknown
+  for (let attempt = 0; ; attempt++) {
+    try {
+      response = await send()
+      break
+    } catch (err) {
+      const { status, body } = readApiError(err)
+      const wait = Number(body.retry_after_seconds) || 5
+      if (status !== 429 || attempt >= MAX_RATE_LIMIT_RETRIES || wait > MAX_RATE_LIMIT_WAIT_SECONDS) throw err
+      await sleep(wait * 1000)
+    }
+  }
   if (typeof response === 'string') {
     try {
       return JSON.parse(response) as IDataObject
@@ -144,6 +183,20 @@ export async function brixfitRequest(
     }
   }
   return response as IDataObject
+}
+
+/**
+ * A stable Idempotency-Key for one item of one execution. If n8n retries the
+ * node, Brixfit sees the same key and returns the first result instead of
+ * creating a duplicate. The body is part of the key, so a loop that sends
+ * different data through the same node gets a different key each time.
+ */
+export function idempotencyKeyFor(ctx: IExecuteFunctions | IHookFunctions, scope: string, body: IDataObject): string | undefined {
+  const executionId = 'getExecutionId' in ctx ? ctx.getExecutionId() : undefined
+  if (!executionId) return undefined
+  return createHash('sha256')
+    .update([executionId, ctx.getNode().id, scope, JSON.stringify(body)].join('\n'))
+    .digest('hex')
 }
 
 // Follow `meta.total_pages` until every row is collected.

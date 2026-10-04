@@ -220,10 +220,24 @@ export class BrixfitTrigger implements INodeType {
       }
 
       // ── Replay protection ───────────────────────────────────────────────
-      // Only checked after signature passes — forged timestamps can't reach here.
+      // Newer Brixfit versions also send `X-Brixfit-Signature-V2: t=<unix>,v1=<hex>`,
+      // where the timestamp is part of what is signed. When it is present it must
+      // verify, and its timestamp is the one trusted for the replay window. Older
+      // versions only send the plain timestamp header, which is not signed.
+      const v2 = /^t=(\d+),v1=([0-9a-f]{64})$/.exec(String(req.headers['x-brixfit-signature-v2'] ?? ''))
+      let signedTsMs: number | undefined
+      if (req.headers['x-brixfit-signature-v2'] !== undefined) {
+        const expectedV2 = v2 ? createHmac('sha256', secret).update(`${v2[1]}.${rawBody}`).digest('hex') : ''
+        const okV2 = !!v2 && timingSafeEqual(Buffer.from(v2[2]), Buffer.from(expectedV2))
+        if (!okV2) {
+          return { webhookResponse: { status: 401, body: JSON.stringify({ error: 'Invalid signature' }) } }
+        }
+        signedTsMs = Number(v2![1]) * 1000
+      }
+
       if (replayWindowMin > 0) {
         const tsHeader  = req.headers['x-brixfit-timestamp'] as string | undefined
-        const tsMs      = tsHeader ? new Date(tsHeader).getTime() : NaN
+        const tsMs      = signedTsMs ?? (tsHeader ? new Date(tsHeader).getTime() : NaN)
         const windowMs  = replayWindowMin * 60 * 1000
 
         if (isNaN(tsMs) || Date.now() - tsMs > windowMs) {
