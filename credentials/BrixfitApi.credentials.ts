@@ -49,7 +49,8 @@ export class BrixfitApi implements ICredentialType {
   test: ICredentialTestRequest = {
     request: {
       baseURL: '={{$credentials.baseUrl}}',
-      url: '/api/public/v1/me',
+      url: '/api/public/v1/leads',
+      qs: { per_page: 1 },
     },
   }
 }
