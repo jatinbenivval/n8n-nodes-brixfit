@@ -9,6 +9,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 [![Changelog](https://img.shields.io/badge/Changelog-v1.4.1-22c55e?style=for-the-badge)](CHANGELOG/v1.4.1-2026-10-05.md)
 
+![API keys](https://img.shields.io/badge/API_keys-scoped_permissions-7c3aed?style=for-the-badge)
+![Webhooks](https://img.shields.io/badge/Webhooks-HMAC_signed-7c3aed?style=for-the-badge)
+![Retries](https://img.shields.io/badge/Retries-no_duplicate_leads-7c3aed?style=for-the-badge)
+
 [![Website](https://img.shields.io/badge/%F0%9F%8C%90_Website-brixfit.app-2563eb?style=for-the-badge)](https://brixfit.app)
 [![Get API key](https://img.shields.io/badge/%F0%9F%94%91_Get_API_key-Developer-16a34a?style=for-the-badge)](https://brixfit.app/coach/developer)
 [![API docs](https://img.shields.io/badge/%F0%9F%93%98_API_docs-Read-0ea5e9?style=for-the-badge)](https://brixfit.app/api-docs)
@@ -42,7 +46,7 @@ This node lets you connect Brixfit to any tool in your n8n workflow.
 ## Prerequisites
 
 - A [Brixfit](https://brixfit.app) account (coach plan)
-- An API key — generate one at **Brixfit → Developer → API Keys**
+- An API key — generate one at **Brixfit → Developer → API Keys** and give it only the permissions your workflows need
 - n8n v1.0.0 or later
 
 ---
