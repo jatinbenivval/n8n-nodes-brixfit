@@ -2,11 +2,17 @@
 
 <div align="center">
 
-![Brixfit](https://img.shields.io/badge/Brixfit-Coaching%20CRM-6366f1?style=for-the-badge)
-[![npm version](https://img.shields.io/npm/v/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
-[![npm downloads](https://img.shields.io/npm/dm/n8n-nodes-brixfit?style=for-the-badge&color=6366f1)](https://www.npmjs.com/package/n8n-nodes-brixfit)
+![Brixfit](https://img.shields.io/badge/Brixfit-Coaching%20CRM-2563eb?style=for-the-badge)
+[![npm version](https://img.shields.io/npm/v/n8n-nodes-brixfit?style=for-the-badge&color=2563eb&logo=npm&logoColor=white)](https://www.npmjs.com/package/n8n-nodes-brixfit)
+[![npm downloads](https://img.shields.io/npm/dm/n8n-nodes-brixfit?style=for-the-badge&color=2563eb)](https://www.npmjs.com/package/n8n-nodes-brixfit)
+[![n8n community node](https://img.shields.io/badge/n8n-community%20node-ea4b71?style=for-the-badge)](https://docs.n8n.io/integrations/community-nodes/installation/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 [![Changelog](https://img.shields.io/badge/Changelog-v1.4.0-22c55e?style=for-the-badge)](CHANGELOG/v1.4.0-2026-10-04.md)
+
+[![Website](https://img.shields.io/badge/%F0%9F%8C%90_Website-brixfit.app-2563eb?style=for-the-badge)](https://brixfit.app)
+[![Get API key](https://img.shields.io/badge/%F0%9F%94%91_Get_API_key-Developer-16a34a?style=for-the-badge)](https://brixfit.app/coach/developer)
+[![API docs](https://img.shields.io/badge/%F0%9F%93%98_API_docs-Read-0ea5e9?style=for-the-badge)](https://brixfit.app/api-docs)
+[![Support](https://img.shields.io/badge/%F0%9F%92%AC_Support-Email_us-f59e0b?style=for-the-badge)](mailto:support@brixfit.app)
 
 **Official n8n community node for [Brixfit](https://brixfit.app) — the AI-powered Coaching CRM for fitness coaches.**
 
@@ -267,7 +273,7 @@ This node follows security best practices out of the box:
 - [Developer dashboard](https://brixfit.app/coach/developer) *(login required — API keys & webhooks)*
 - [npm package](https://www.npmjs.com/package/n8n-nodes-brixfit)
 - [GitHub repository](https://github.com/jatinbenivval/n8n-nodes-brixfit)
-- [Changelog](CHANGELOG/v1.3.4-2026-06-01.md)
+- [Changelog](CHANGELOG/v1.4.0-2026-10-04.md)
 - [Report a bug](https://github.com/jatinbenivval/n8n-nodes-brixfit/issues)
 - [Contact support](mailto:support@brixfit.app)
 
