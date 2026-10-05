@@ -3,12 +3,27 @@ import { WEBHOOK_EVENT_OPTIONS } from './events'
 
 // Parameter names are part of saved workflows — never rename them.
 
+// Values the Brixfit API accepts. "Reviewed" / "Needs Review" are completed check-ins split by whether the coach reviewed them.
 const CHECKIN_STATUS_OPTIONS = [
-  { name: 'All',       value: ''          },
-  { name: 'Completed', value: 'completed' },
-  { name: 'Pending',   value: 'pending'   },
-  { name: 'Reviewed',  value: 'reviewed'  },
+  { name: 'All',          value: ''             },
+  { name: 'Completed',    value: 'completed'    },
+  { name: 'Escalated',    value: 'escalated'    },
+  { name: 'Excused',      value: 'excused'      },
+  { name: 'Missed',       value: 'missed'       },
+  { name: 'Needs Review', value: 'needs_review' },
+  { name: 'Overdue',      value: 'overdue'      },
+  { name: 'Pending',      value: 'pending'      },
+  { name: 'Reviewed',     value: 'reviewed'     },
+  { name: 'Scheduled',    value: 'scheduled'    },
 ]
+
+const INCLUDE_ANSWERS_OPTION = {
+  displayName: 'Include Answers',
+  name: 'include_answers',
+  type: 'boolean' as const,
+  default: true,
+  description: 'Whether each check-in includes the questions asked and the answers given. Turn off for a faster, lighter list when you only need status and dates.',
+}
 
 // Same options appear under Check-in → Get by Client and Client → Get Check-ins.
 const checkinOptions = (name: string, resource: string, operation: string): INodeProperties => ({
@@ -19,11 +34,12 @@ const checkinOptions = (name: string, resource: string, operation: string): INod
   displayOptions: { show: { resource: [resource], operation: [operation] } },
   default: {},
   options: [
-    { displayName: 'From Date', name: 'from_date', type: 'string', default: '', description: 'YYYY-MM-DD' },
+    { displayName: 'From Date', name: 'from_date', type: 'dateTime', default: '', description: 'Only check-ins on or after this date' },
+    INCLUDE_ANSWERS_OPTION,
     { displayName: 'Page',      name: 'page',      type: 'number', default: 1 },
     { displayName: 'Per Page',  name: 'per_page',  type: 'number', default: 20 },
     { displayName: 'Status',    name: 'status',    type: 'options', options: CHECKIN_STATUS_OPTIONS, default: '' },
-    { displayName: 'To Date',   name: 'to_date',   type: 'string', default: '', description: 'YYYY-MM-DD' },
+    { displayName: 'To Date',   name: 'to_date',   type: 'dateTime', default: '', description: 'Only check-ins on or before this date' },
   ],
 })
 
@@ -88,8 +104,9 @@ export const brixfitProperties: INodeProperties[] = [
     noDataExpression: true,
     displayOptions: { show: { resource: ['checkin'] } },
     options: [
-      { name: 'Get Many',      value: 'getAll',      description: 'List check-ins with optional filters',    action: 'Get many check-ins'      },
-      { name: 'Get by Client', value: 'getByClient', description: 'Get all check-ins for a specific client', action: 'Get check-ins by client' },
+      { name: 'Get',           value: 'get',         description: 'Get one check-in with the client name, questions and answers', action: 'Get a check-in'          },
+      { name: 'Get Many',      value: 'getAll',      description: 'List check-ins with client name, questions and answers',       action: 'Get many check-ins'      },
+      { name: 'Get by Client', value: 'getByClient', description: 'Get all check-ins for a specific client',                       action: 'Get check-ins by client' },
     ],
     default: 'getAll',
   },
@@ -122,18 +139,20 @@ export const brixfitProperties: INodeProperties[] = [
 
   // ── IDs ────────────────────────────────────────────────────────────────────
   {
-    displayName: 'Lead ID',
+    displayName: 'Lead',
     name: 'leadId',
-    type: 'string',
+    type: 'options',
+    typeOptions: { loadOptionsMethod: 'getLeads' },
     required: true,
     displayOptions: { show: { resource: ['lead'], operation: ['get', 'update', 'updateStatus', 'delete', 'getHealthReport', 'listHealthReports'] } },
     default: '',
-    description: 'The unique ID of the lead',
+    description: 'Your most recent leads by name. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
   },
   {
-    displayName: 'Client ID',
+    displayName: 'Client',
     name: 'clientId',
-    type: 'string',
+    type: 'options',
+    typeOptions: { loadOptionsMethod: 'getClients' },
     required: true,
     displayOptions: {
       show: {
@@ -142,16 +161,26 @@ export const brixfitProperties: INodeProperties[] = [
       },
     },
     default: '',
-    description: 'The unique ID of the client',
+    description: 'Your clients by name. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
   },
   {
-    displayName: 'Client ID',
+    displayName: 'Client',
     name: 'checkinClientId',
-    type: 'string',
+    type: 'options',
+    typeOptions: { loadOptionsMethod: 'getClients' },
     required: true,
     displayOptions: { show: { resource: ['checkin'], operation: ['getByClient'] } },
     default: '',
-    description: 'Fetch all check-ins submitted by this client',
+    description: 'Fetch all check-ins submitted by this client. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+  },
+  {
+    displayName: 'Check-in ID',
+    name: 'checkinId',
+    type: 'string',
+    required: true,
+    displayOptions: { show: { resource: ['checkin'], operation: ['get'] } },
+    default: '',
+    description: 'The unique ID of the check-in (the "id" field returned by Get Many, or "instance_id" from the Check-in Submitted trigger)',
   },
   {
     displayName: 'Webhook ID',
@@ -329,23 +358,13 @@ export const brixfitProperties: INodeProperties[] = [
     default: {},
     options: [
       { displayName: 'Client ID', name: 'client_id', type: 'string', default: '' },
-      { displayName: 'From Date', name: 'from_date', type: 'string', default: '', description: 'YYYY-MM-DD' },
+      { displayName: 'Client Name or Email', name: 'client', type: 'string', default: '', description: 'Only check-ins from clients whose name or email contains this text' },
+      { displayName: 'From Date', name: 'from_date', type: 'dateTime', default: '', description: 'Only check-ins on or after this date' },
+      INCLUDE_ANSWERS_OPTION,
       { displayName: 'Page',      name: 'page',      type: 'number', default: 1 },
       { displayName: 'Per Page',  name: 'per_page',  type: 'number', default: 20, description: 'Ignored when Return All is enabled' },
-      {
-        displayName: 'Status',
-        name: 'status',
-        type: 'options',
-        options: [
-          { name: 'All',       value: ''          },
-          { name: 'Completed', value: 'completed' },
-          { name: 'Overdue',   value: 'overdue'   },
-          { name: 'Pending',   value: 'pending'   },
-          { name: 'Reviewed',  value: 'reviewed'  },
-        ],
-        default: '',
-      },
-      { displayName: 'To Date', name: 'to_date', type: 'string', default: '', description: 'YYYY-MM-DD' },
+      { displayName: 'Status', name: 'status', type: 'options', options: CHECKIN_STATUS_OPTIONS, default: '' },
+      { displayName: 'To Date', name: 'to_date', type: 'dateTime', default: '', description: 'Only check-ins on or before this date' },
     ],
   },
 

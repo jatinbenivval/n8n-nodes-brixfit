@@ -205,6 +205,19 @@ All payloads are **HMAC-SHA256 signed**. The node verifies signatures using the 
 
 ---
 
+## Ready-Made Workflows
+
+Import any of these from the [`workflows/`](workflows) folder (n8n → Workflows → ⋯ → Import from file), pick your Brixfit and email (SMTP) credentials, set your own email address, and activate.
+
+| File | What it does |
+|---|---|
+| `1-welcome-new-leads.json` | Emails every new lead a welcome message (skips leads without an email) |
+| `2-checkin-submitted-summary.json` | Emails you each submitted check-in with the client name and every question and answer |
+| `3-daily-overdue-checkins.json` | Every morning, one email listing clients with an overdue check-in |
+| `4-weekly-checkins-to-review.json` | Every Monday, one email listing submitted check-ins you have not reviewed |
+
+Developers: `npm run build && node scripts/validate-workflows.js` checks every template against the node definitions.
+
 ## Example Workflows
 
 ### 1. Capture leads from any form → Brixfit

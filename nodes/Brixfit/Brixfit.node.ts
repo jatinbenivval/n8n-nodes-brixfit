@@ -15,10 +15,16 @@ import {
   brixfitGetAll,
   brixfitRequest,
   compact,
+  dateOnly,
   idempotencyKeyFor,
   toNodeError,
   validateId,
 } from './Brixfit.utils'
+
+const label = (name: unknown, email: unknown) => {
+  const n = String(name ?? '').trim() || 'Unnamed'
+  return email ? `${n} (${String(email)})` : n
+}
 
 type Param = (name: string, fallback?: unknown) => unknown
 
@@ -51,6 +57,24 @@ export class Brixfit implements INodeType {
   methods = {
     loadOptions: {
       // Lead pipeline statuses for the Update Status dropdown.
+      // Client names for the client pickers. Newest 500 so the list stays quick; use an expression for older ones.
+      async getClients(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+        try {
+          const rows = await brixfitGetAll(this, '/clients', {}, 5)
+          return rows.map((c) => ({ name: label(c.full_name, c.email), value: String(c.id), description: c.account_status ? String(c.account_status) : undefined }))
+        } catch (err) {
+          throw toNodeError(err, this.getNode())
+        }
+      },
+      // Lead names for the lead picker (newest first).
+      async getLeads(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+        try {
+          const rows = await brixfitGetAll(this, '/leads', { sort: 'created_at:desc' }, 5)
+          return rows.map((l) => ({ name: label(l.name, l.email), value: String(l.id), description: l.status ? String(l.status) : undefined }))
+        } catch (err) {
+          throw toNodeError(err, this.getNode())
+        }
+      },
       async getLeadStatuses(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
         try {
           const res = await brixfitRequest(this, 'GET', '/leads/statuses')
@@ -116,12 +140,12 @@ async function run(
 
   // Shared by lead/client/check-in "Get Many": honours Return All, otherwise one page.
   const list = async (path: string) => {
-    const qs = compact(param('filters', {}) as IDataObject)
+    const qs = dateOnly(compact(param('filters', {}) as IDataObject))
     return param('returnAll', false) ? brixfitGetAll(ctx, path, qs) : one('GET', path, { qs })
   }
 
   const checkinsFor = (clientId: string, optionsParam: string) =>
-    one('GET', '/checkins', { qs: { client_id: clientId, ...compact(param(optionsParam, {}) as IDataObject) } })
+    one('GET', '/checkins', { qs: { client_id: clientId, ...dateOnly(compact(param(optionsParam, {}) as IDataObject)) } })
 
   const reportQs = () => compact(param('healthReportListOptions', {}) as IDataObject)
 
@@ -154,6 +178,7 @@ async function run(
     case 'client.getOnboarding':  return one('GET', `/clients/${id('clientId', 'Client ID')}/onboarding`)
 
     // ── Check-in ───────────────────────────────────────────────────────────
+    case 'checkin.get':           return one('GET', `/checkins/${id('checkinId', 'Check-in ID')}`)
     case 'checkin.getAll':        return list('/checkins')
     case 'checkin.getByClient':   return checkinsFor(id('checkinClientId', 'Client ID'), 'checkinClientOptions')
 

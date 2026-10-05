@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-brixfit",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "n8n community node for Brixfit Coaching CRM — manage leads, clients, check-ins, forms and webhooks",
   "author": {
     "name": "Jatin Beniwal",

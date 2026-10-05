@@ -1,0 +1,149 @@
+{
+  "name": "Brixfit: Weekly check-ins waiting for your review",
+  "nodes": [
+    {
+      "id": "note",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -60
+      ],
+      "parameters": {
+        "content": "**Check-ins to review**\nEvery Monday at 9:00 you get one email listing submitted check-ins you have not reviewed yet. No email when everything is reviewed.\n\nPick your Brixfit credential and your email (SMTP) account, then activate.",
+        "width": 380,
+        "height": 200
+      }
+    },
+    {
+      "id": "s",
+      "name": "Every Monday",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        320,
+        160
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b",
+      "name": "Get check-ins to review",
+      "type": "n8n-nodes-brixfit.brixfit",
+      "typeVersion": 1,
+      "position": [
+        560,
+        160
+      ],
+      "parameters": {
+        "resource": "checkin",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "status": "needs_review",
+          "include_answers": false
+        }
+      },
+      "credentials": {
+        "brixfitApi": {
+          "id": "",
+          "name": "Brixfit API"
+        }
+      }
+    },
+    {
+      "id": "Build the list",
+      "name": "Build the list",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        160
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((i) => i.json);\nif (!rows.length) return [];\nconst lines = rows.map((r) => `- ${r.client_name || 'Client'}: ${r.checkin_type} check-in, ${r.checkin_date}`);\nreturn [{ json: { count: rows.length, digest: lines.join('\\n') } }];"
+      }
+    },
+    {
+      "id": "Email me",
+      "name": "Email me",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1040,
+        160
+      ],
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "fromEmail": "you@example.com",
+        "toEmail": "you@example.com",
+        "subject": "={{ $json.count }} check-in(s) waiting for your review",
+        "emailFormat": "text",
+        "text": "=Submitted check-ins you have not reviewed:\n\n{{ $json.digest }}",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Monday": {
+      "main": [
+        [
+          {
+            "node": "Get check-ins to review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get check-ins to review": {
+      "main": [
+        [
+          {
+            "node": "Build the list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the list": {
+      "main": [
+        [
+          {
+            "node": "Email me",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

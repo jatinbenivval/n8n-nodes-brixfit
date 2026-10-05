@@ -70,6 +70,16 @@ export function compact(obj: IDataObject): IDataObject {
   ) as IDataObject
 }
 
+// The date pickers return full timestamps; Brixfit filters by calendar day (YYYY-MM-DD).
+export function dateOnly(qs: IDataObject): IDataObject {
+  const out = { ...qs }
+  for (const key of ['from_date', 'to_date']) {
+    const v = out[key]
+    if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) out[key] = v.slice(0, 10)
+  }
+  return out
+}
+
 interface ApiErrorBody {
   error?: string
   code?: string
@@ -80,21 +90,39 @@ interface ApiErrorBody {
 }
 
 // Pull the Brixfit `{ error, code, details, … }` body out of whatever the HTTP layer threw.
+// n8n often wraps the original request error (NodeApiError → cause → response), so look through the
+// whole chain; otherwise the real Brixfit message is lost and users only see "Bad request".
 function readApiError(err: unknown): { status?: number; body: ApiErrorBody; raw: string } {
-  const e = err as {
+  type Layer = {
     httpCode?: string | number
     statusCode?: number
-    response?: { status?: number; statusCode?: number; body?: unknown }
+    response?: { status?: number; statusCode?: number; body?: unknown; data?: unknown }
     error?: unknown
+    body?: unknown
+    cause?: unknown
     message?: string
   }
-  const status = Number(e?.response?.statusCode ?? e?.response?.status ?? e?.statusCode ?? e?.httpCode) || undefined
-  let body: unknown = e?.response?.body ?? e?.error
-  if (typeof body === 'string') {
-    try { body = JSON.parse(body) } catch { /* keep as text */ }
+  let status: number | undefined
+  let body: ApiErrorBody = {}
+  const seen = new Set<unknown>()
+  const queue: unknown[] = [err]
+  while (queue.length && seen.size < 8) {
+    const layer = queue.shift() as Layer | undefined
+    if (!layer || typeof layer !== 'object' || seen.has(layer)) continue
+    seen.add(layer)
+    status ??= Number(layer.response?.statusCode ?? layer.response?.status ?? layer.statusCode ?? layer.httpCode) || undefined
+    for (let candidate of [layer.response?.body, layer.response?.data, layer.error, layer.body]) {
+      if (typeof candidate === 'string') {
+        try { candidate = JSON.parse(candidate) } catch { continue }
+      }
+      if (candidate && typeof candidate === 'object' && !body.error && (candidate as ApiErrorBody).error) {
+        body = candidate as ApiErrorBody
+      }
+    }
+    queue.push(layer.cause, layer.error, layer.response)
   }
-  const parsed = body && typeof body === 'object' ? (body as ApiErrorBody) : {}
-  return { status, body: parsed, raw: e?.message ?? String(err) }
+  const raw = (err as Layer | undefined)?.message ?? String(err)
+  return { status, body, raw }
 }
 
 // Turn any API/HTTP failure into one readable n8n error: what failed, which fields, how to fix it.
@@ -109,7 +137,12 @@ export function toNodeError(err: unknown, node: INode, itemIndex?: number): Node
       ? [JSON.stringify(body.details)]
       : []
 
-  let message = body.error ? `Brixfit: ${body.error}` : `Brixfit request failed: ${raw}`
+  const generic = /^(bad request|forbidden|not found|internal server error|unauthorized)\b.*(please check|try again|exist)/i
+  let message = body.error
+    ? `Brixfit: ${body.error}`
+    : status
+      ? `Brixfit returned an error (HTTP ${status})${generic.test(raw) ? '' : `: ${raw}`}`
+      : `Brixfit request failed: ${raw}`
   if (lines.length) message += ` ${lines.join(' ')}`
 
   const newKeyHint = 'Create a new key in Brixfit → Developer → API Keys and update the Brixfit API credential.'
@@ -136,6 +169,14 @@ export function toNodeError(err: unknown, node: INode, itemIndex?: number): Node
     description = `Required but missing: ${body.missing_fields.join(', ')}. Required fields follow your live Brixfit lead form — Forms → Lead form.`
   } else if (status === 429) {
     description = 'Rate limit reached. Wait a moment and retry, or slow the workflow down.'
+  } else if (status === 400) {
+    description = 'Brixfit rejected a value in this request. Check the IDs, dates (YYYY-MM-DD) and filters you set on this node.'
+  } else if (status === 403) {
+    description = 'The API key is not allowed to do this. Check its permissions in Brixfit → Developer → API Keys.'
+  } else if (status && status >= 500) {
+    description = 'Brixfit had a problem handling this request. Try again in a moment; if it keeps failing, contact Brixfit support with the time of the failure.'
+  } else if (!status) {
+    description = 'Could not reach Brixfit. Check the Base URL in the Brixfit API credential and that the server is online.'
   }
   return new NodeOperationError(node, message, { ...opts, description })
 }
@@ -200,9 +241,9 @@ export function idempotencyKeyFor(ctx: IExecuteFunctions | IHookFunctions, scope
 }
 
 // Follow `meta.total_pages` until every row is collected.
-export async function brixfitGetAll(ctx: Ctx, path: string, qs: IDataObject = {}): Promise<IDataObject[]> {
+export async function brixfitGetAll(ctx: Ctx, path: string, qs: IDataObject = {}, maxPages = MAX_PAGES): Promise<IDataObject[]> {
   const rows: IDataObject[] = []
-  for (let page = 1; page <= MAX_PAGES; page++) {
+  for (let page = 1; page <= maxPages; page++) {
     const res = await brixfitRequest(ctx, 'GET', path, { qs: { ...qs, page, per_page: 100 } })
     const data = (res.data ?? []) as IDataObject[]
     if (Array.isArray(data)) rows.push(...data)

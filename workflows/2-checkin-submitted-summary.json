@@ -1,0 +1,87 @@
+{
+  "name": "Brixfit: Email me every submitted check-in",
+  "nodes": [
+    {
+      "id": "note",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -60
+      ],
+      "parameters": {
+        "content": "**Check-in summary**\n1. Pick your Brixfit API credential on the trigger.\n2. In \"Email me\", choose your email (SMTP) account and put your own address in From and To.\n3. Activate.\n\nEach email lists every question and the answer the client gave.",
+        "width": 380,
+        "height": 200
+      }
+    },
+    {
+      "id": "t",
+      "name": "Check-in submitted",
+      "type": "n8n-nodes-brixfit.brixfitTrigger",
+      "typeVersion": 1,
+      "position": [
+        320,
+        160
+      ],
+      "parameters": {
+        "events": [
+          "checkin.submitted"
+        ],
+        "options": {}
+      },
+      "credentials": {
+        "brixfitApi": {
+          "id": "",
+          "name": "Brixfit API"
+        }
+      },
+      "webhookId": "brixfit-checkin-summary"
+    },
+    {
+      "id": "Email me",
+      "name": "Email me",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        580,
+        160
+      ],
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "fromEmail": "you@example.com",
+        "toEmail": "you@example.com",
+        "subject": "={{ $json.client_name }} submitted a {{ $json.checkin_type }} check-in",
+        "emailFormat": "text",
+        "text": "={{ $json.client_name }} - {{ $json.checkin_type }} check-in for {{ $json.checkin_date }}\n\n{{ $json.answers_text }}",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Check-in submitted": {
+      "main": [
+        [
+          {
+            "node": "Email me",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}
